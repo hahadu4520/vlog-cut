@@ -1,0 +1,26 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AssetsIndex",
+  "description": "Output of video-asset-index. List of clips with metadata + content tags.",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": ["file"],
+    "properties": {
+      "file":     { "type": "string", "description": "filename relative to source directory" },
+      "duration": { "type": "number" },
+      "width":    { "type": "integer" },
+      "height":   { "type": "integer" },
+      "fps":      { "type": "number" },
+      "rotation": { "type": ["integer", "null"], "description": "metadata rotation in degrees, null if none" },
+      "orientation": { "enum": ["landscape", "portrait", "square"] },
+      "scene":    { "type": "string", "description": "one-line scene summary, <=20 chars" },
+      "description": { "type": "string", "description": "detailed description, <=60 chars" },
+      "tags":     { "type": "array", "items": { "type": "string" } },
+      "chapters": { "type": "array", "items": { "type": "string" }, "description": "section ids this clip fits into" },
+      "usable":   { "oneOf": [{"type": "boolean"}, {"const": "marginal"}] },
+      "highlight": { "type": "boolean" },
+      "reason":   { "type": "string", "description": "if not usable, why" }
+    }
+  }
+}

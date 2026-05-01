@@ -1,0 +1,55 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "PipelineState",
+  "description": "vlog-cut-pipeline tracks progress in .vlog-cut/state.json under the project directory.",
+  "type": "object",
+  "required": ["project_dir", "stage", "outputs", "checkpoints", "settings"],
+  "properties": {
+    "project_dir": { "type": "string" },
+    "stage": {
+      "enum": [
+        "init",
+        "narration_ready",
+        "assets_indexed",
+        "timeline_drafted",
+        "timeline_reviewed",
+        "rough_cut_rendered",
+        "rough_cut_approved",
+        "subtitles_burned",
+        "done"
+      ]
+    },
+    "outputs": {
+      "type": "object",
+      "properties": {
+        "narration":    { "type": "string" },
+        "timing":       { "type": "string" },
+        "assets_index": { "type": "string" },
+        "timeline":     { "type": "string" },
+        "rough_cut":    { "type": "string" },
+        "final":        { "type": "string" }
+      }
+    },
+    "checkpoints": {
+      "type": "object",
+      "properties": {
+        "narration_approved":   { "type": "boolean" },
+        "timeline_approved":    { "type": "boolean" },
+        "rough_cut_approved":   { "type": "boolean" },
+        "subs_preview_approved":{ "type": "boolean" }
+      }
+    },
+    "settings": {
+      "type": "object",
+      "properties": {
+        "narration_source": { "enum": ["tts", "user"] },
+        "voice":            { "type": "string" },
+        "rate":             { "type": "string" },
+        "output_aspect":    { "enum": ["16:9", "9:16", "1:1"] },
+        "output_size":      { "type": "string" },
+        "fps":              { "type": "integer" },
+        "want_subtitles":   { "type": "boolean" }
+      }
+    }
+  }
+}

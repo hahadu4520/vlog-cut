@@ -1,0 +1,25 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Script",
+  "description": "Input to tts-from-script: the narration text broken into sections and lines.",
+  "type": "object",
+  "required": ["voice", "rate", "sections"],
+  "properties": {
+    "voice": { "type": "string", "description": "TTS voice id, e.g. zh-CN-XiaoyiNeural" },
+    "rate":  { "type": "string", "description": "TTS rate offset, e.g. \"+0%\" or \"-10%\"" },
+    "gap_section_sec": { "type": "number", "default": 0.6 },
+    "gap_line_sec":    { "type": "number", "default": 0.25 },
+    "sections": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "lines"],
+        "properties": {
+          "id":    { "type": "string" },
+          "title": { "type": "string" },
+          "lines": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Timeline",
+  "description": "Output of narration-cut.plan. Per-line shot assignments.",
+  "type": "object",
+  "required": ["video_total", "fps", "size", "lines"],
+  "properties": {
+    "video_total": { "type": "number" },
+    "fps": { "type": "integer", "default": 30 },
+    "size": { "type": "string", "description": "e.g. \"1920x1080\"" },
+    "notes": { "type": "string" },
+    "lines": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "text", "duration", "shots"],
+        "properties": {
+          "id":       { "type": "string" },
+          "text":     { "type": "string" },
+          "duration": { "type": "number", "description": "audio duration of this line" },
+          "shots": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["file", "in", "dur"],
+              "properties": {
+                "file": { "type": "string" },
+                "in":   { "type": "number", "description": "source clip in-point in seconds" },
+                "dur":  { "type": "number", "description": "shot duration in seconds" },
+                "why":  { "type": "string", "description": "rationale for picking this shot" }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

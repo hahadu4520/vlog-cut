@@ -1,0 +1,29 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Timing",
+  "description": "Output of tts-from-script (or align-narration). Per-line audio timestamps used by all downstream skills.",
+  "type": "object",
+  "required": ["lines", "total_duration"],
+  "properties": {
+    "voice": { "type": "string" },
+    "rate":  { "type": "string" },
+    "total_duration": { "type": "number" },
+    "lines": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "section", "text", "file", "duration", "start", "end"],
+        "properties": {
+          "id":            { "type": "string" },
+          "section":       { "type": "string" },
+          "section_title": { "type": "string" },
+          "text":          { "type": "string" },
+          "file":          { "type": "string", "description": "path to per-line audio file (optional for align-narration)" },
+          "duration":      { "type": "number" },
+          "start":         { "type": "number" },
+          "end":           { "type": "number" }
+        }
+      }
+    }
+  }
+}

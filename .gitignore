@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+
+# vlog-cut runtime artifacts (per-project working files)
+.vlog-cut/
+output*/
+output_*/
+
+# Audio/video build artifacts (anywhere except tests/fixtures)
+*.wav
+*.mp3
+*.mp4
+*.mov
+*.aac
+!tests/fixtures/**/*.wav
+!tests/fixtures/**/*.mp3
+!tests/fixtures/**/*.mp4
+
+# Misc
+.DS_Store
+.idea/
+.vscode/
+*.log
