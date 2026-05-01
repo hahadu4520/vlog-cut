@@ -1,31 +1,16 @@
-# Python
 __pycache__/
-*.py[cod]
-*$py.class
+*.pyc
 *.egg-info/
-.eggs/
-build/
-dist/
-.venv/
-venv/
-
-# vlog-cut runtime artifacts (per-project working files)
 .vlog-cut/
-output*/
-output_*/
-
-# Audio/video build artifacts (anywhere except tests/fixtures)
-*.wav
-*.mp3
-*.mp4
-*.mov
-*.aac
-!tests/fixtures/**/*.wav
-!tests/fixtures/**/*.mp3
-!tests/fixtures/**/*.mp4
-
-# Misc
+.venv/
+.pytest_cache/
 .DS_Store
-.idea/
-.vscode/
-*.log
+.claude/
+
+# real-world dogfood artefacts: keep the project out of git, but allow
+# proj/<name>/ subfolders if a future contributor adds an example with
+# a stripped-down checked-in version
+proj/
+
+# raw source clips for the user's own projects
+0501testvideo/

@@ -44,14 +44,17 @@ git clone <this repo> ~/vlog-cut
 
 ```
 skills/
-├── vlog-cut-pipeline/      # 顶层编排，含 4 个强制审核检查点
-├── tts-from-script/        # 文案 → 配音 + 时间戳
-├── video-asset-index/      # 视频目录 → 素材索引
-└── narration-cut/          # timeline 规划 + 渲染（两阶段）
+├── vlog_cut_pipeline/      # 顶层编排，含 4 个强制审核检查点
+├── tts_from_script/        # 文案 → 配音 + 时间戳
+├── video_asset_index/      # 视频目录 → 素材索引
+└── narration_cut/          # timeline 规划 + 校验 + 渲染（plan/validate/render）
 
 shared/schemas/             # 数据契约（timing/assets/timeline JSON schema）
+shared/ffmpeg_helpers.py    # ffmpeg/ffprobe 薄封装
 docs/                       # 教程、架构、常见问题
 ```
+
+> 目录使用下划线（Python 包命名要求），SKILL.md 仍按 `name: vlog-cut-pipeline` 等连字符标识对外暴露 skill 名。
 
 ## 设计原则
 
