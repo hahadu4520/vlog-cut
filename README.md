@@ -46,6 +46,7 @@ git clone <this repo> ~/vlog-cut
 skills/
 ├── vlog_cut_pipeline/      # 顶层编排，含 4 个强制审核检查点
 ├── tts_from_script/        # 文案 → 配音 + 时间戳
+├── align_narration/        # 自带配音 → whisper 对齐 + 时间戳
 ├── video_asset_index/      # 视频目录 → 素材索引
 └── narration_cut/          # timeline 规划 + 校验 + 渲染（plan/validate/render）
 
@@ -67,9 +68,9 @@ docs/                       # 教程、架构、常见问题
 ## 路线图
 
 - [x] **v0.1**：pipeline + tts-from-script + video-asset-index + narration-cut
+- [x] **v0.4**（提前）：align-narration（用户自带配音 → whisper 对齐）
 - [ ] **v0.2**：burn-subtitles-cn（中文字幕）
 - [ ] **v0.3**：rotation 检测 / 重复扫描的自动修复建议
-- [ ] **v0.4**：align-narration（用户自带配音 → WhisperX 强制对齐）
 - [ ] **v1.0**：完整文档、tutorials、test fixtures
 
 ## License

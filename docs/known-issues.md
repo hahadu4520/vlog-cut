@@ -9,13 +9,13 @@ the proper fix looks like.
 |---|---|---|---|---|
 | 1 | `render.py` `-t` capped tpad freeze frames | smoke test (synthetic fixture) | ✅ fixed | `test_gap_absorbed_by_freeze_when_source_too_short` |
 | 2 | `tts.py` `gap=0` deadlocked ffmpeg concat | smoke test (zero-gap test) | ✅ fixed | `test_cli_overrides_gaps` |
-| 3 | Pipeline can't ingest user-supplied narration | dogfooding 散步 vlog | ⚠️ workaround documented (proper fix = v0.4 `align-narration` skill) | — |
+| 3 | Pipeline can't ingest user-supplied narration | dogfooding 散步 vlog | ✅ fixed (v0.4 `align-narration` skill landed early) | 9 tests in `tests/test_align_narration.py` |
 | 4 | Should detect local whisper before asking | dogfooding 散步 vlog | ⚠️ behavioral lesson (no code change yet) | — |
 | 5 | `render.py` concat broke with relative `--out` | dogfooding 散步 vlog | ✅ fixed | `test_render_works_with_relative_paths` |
 | 6 | `render.py` seg cache key didn't include `in/dur` | dogfooding 散步 vlog (audio felt truncated) | ✅ fixed | `test_cache_invalidates_when_dur_changes` |
 | 7 | Render didn't warn when audio length ≠ video_total | dogfooding 散步 vlog (root cause of perceived "audio truncation") | ✅ fixed | `test_render_warns_on_audio_video_mismatch` |
 
-**Score**: 7 bugs found, 5 fixed in code, 2 documented for v0.4 / behavioral guidance.
+**Score**: 7 bugs found, 6 fixed in code, 1 behavioral guidance (probe-before-asking).
 
 **Cross-cutting lessons**:
 1. **Synthetic smoke tests lie.** Tests 1 & 2 were caught only because I hand-wrote a freeze-path test and a zero-gap test. Tests 5 & 6 slipped past 41 passing tests because every test used `tmp_path` (absolute) and rendered exactly once (no iteration). The test harness needs to model realistic user friction: relative paths, multiple iterations, optional deps that may or may not be present.
@@ -63,15 +63,11 @@ the proper fix looks like.
 
 **Workaround used:** ran `whisper` on the m4a manually, parsed the segment-level JSON into a `timing.json` matching `shared/schemas/timing.schema.json`, then proceeded with `narration-cut` as normal. Helper script left behind at [proj/sanbu/build_timing_from_whisper.py](../proj/sanbu/build_timing_from_whisper.py) for reference.
 
-**Proper fix (planned as v0.4 `align-narration` skill):**
-- new skill `skills/align_narration/` with CLI `vlog-cut-align`
-- inputs: `--script` (the text to align against), `--audio` (m4a/wav/mp3), `--out` (project dir)
-- output: `timing.json` (same schema as tts-from-script's output) + `narration.wav` (the input re-encoded to a canonical format render expects)
-- engine: prefer `whisperx` (has word-level forced alignment, more accurate than vanilla whisper segment timestamps); fall back to `whisper` if whisperx not installed
-- pipeline `SKILL.md` needs a branch at Stage A: "if user has own audio, call align-narration; else call tts-from-script"
-- pipeline `state.json` `settings.narration_source` field already accommodates this (`"tts" | "user"`), so no schema change
+**Status: ✅ fixed.** Built `skills/align_narration/` immediately after v0.1 tag. CLI `vlog-cut-align`. Same Timing schema as tts-from-script so `narration-cut.render` works unchanged. Section grouping done by per-section `head_text` anchors in `script.json` (the first few characters of that section as actually spoken). 9 regression tests in [tests/test_align_narration.py](../tests/test_align_narration.py); end-to-end validation by re-running the 散步 vlog through it (gave the same 5-section timing.json the manual helper had produced).
 
-**Out of scope for this fix:** auto-detecting whether the audio matches the script (whisper hallucinations, missing lines). That's a checkpoint-1 review problem — show the user the alignment diff.
+**Bonus fix:** align-narration probes the audio file's true duration (via ffprobe) and uses THAT as `total_duration`, rather than whisper's last-segment end. This automatically dodges bug #7 for user-supplied audio: even when whisper trims a silent tail, the timing carries the full audio length so `-shortest` won't truncate.
+
+**Out of scope for this fix:** auto-detecting whether the audio matches the script (whisper hallucinations, missing lines). That's a checkpoint-1 review problem — show the user the alignment diff. whisperx (word-level forced alignment) is also still a future enhancement; current implementation falls back to plain whisper.
 
 ---
 

@@ -75,12 +75,32 @@ Initial state when starting fresh:
 
 ### Stage A — narration  (stage `init` → `narration_ready`)
 
+**Branch on `settings.narration_source`:**
+
+**A1 — TTS** (`narration_source=tts`, the default):
+
 1. If user gave plain text, help them write `<project_dir>/script.json` (validate against `shared/schemas/script.schema.json`).
 2. Run:
    ```bash
    vlog-cut-tts --script <project_dir>/script.json --out <project_dir>
    ```
 3. Update state: `stage=narration_ready`, `outputs.timing=<project_dir>/timing.json`, `outputs.narration=<project_dir>/narration.wav`.
+
+**A2 — User-supplied audio** (`narration_source=user`):
+
+The user has their own recording (`.m4a` / `.mp3` / `.wav`). Use `align-narration` instead.
+
+1. Probe local `whisper` first: `which whisper`. If absent, ask the user to install (`pip install openai-whisper`). Don't ask if it's already there.
+2. Help them author a `script.json` with a `head_text` field per section — the first few characters of that section as actually spoken. (Anchors are how align knows where each section begins in the recording.)
+3. Run:
+   ```bash
+   vlog-cut-align --audio <path/to/recording.m4a> \
+                  --script <project_dir>/script.json \
+                  --out <project_dir>
+   ```
+   For first-pass / no-script use, omit `--script` — you get one `narration_00` line covering the whole audio.
+4. Read `timing.json` and check the alignment: any WARN about `head_text` not matching means that section is using the equal-fraction fallback. Edit `head_text`, rerun (whisper output is cached).
+5. Update state: `stage=narration_ready`, `outputs.timing=<project_dir>/timing.json`, `outputs.narration=<project_dir>/narration.wav`.
 
 ### 🔴 Checkpoint 1 — narration approved
 

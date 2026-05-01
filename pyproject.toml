@@ -16,6 +16,7 @@ dev = [
 
 [project.scripts]
 vlog-cut-tts        = "skills.tts_from_script.tts:cli"
+vlog-cut-align      = "skills.align_narration.align:cli"
 vlog-cut-index      = "skills.video_asset_index.index:cli"
 vlog-cut-plan       = "skills.narration_cut.plan:cli"
 vlog-cut-validate   = "skills.narration_cut.validate:cli"
