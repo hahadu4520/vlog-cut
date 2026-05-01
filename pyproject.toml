@@ -21,6 +21,9 @@ vlog-cut-index      = "skills.video_asset_index.index:cli"
 vlog-cut-plan       = "skills.narration_cut.plan:cli"
 vlog-cut-validate   = "skills.narration_cut.validate:cli"
 vlog-cut-render     = "skills.narration_cut.render:cli"
+vlog-cut-subs-split = "skills.burn_subtitles_cn.split:cli"
+vlog-cut-subs-build = "skills.burn_subtitles_cn.build:cli"
+vlog-cut-subs-burn  = "skills.burn_subtitles_cn.burn:cli"
 
 [build-system]
 requires = ["setuptools>=68"]

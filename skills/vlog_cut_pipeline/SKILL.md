@@ -177,9 +177,46 @@ When approved, set `checkpoints.timeline_approved=true`, `stage=timeline_reviewe
 
 If they want changes: most fixes happen by editing `timeline.json` and re-running render (segs are cached — only changed shots re-encode). Bigger fixes (wrong narration line, mistagged clip) loop back to earlier stages.
 
-When approved, set `checkpoints.rough_cut_approved=true`, `stage=rough_cut_approved` → `done`.
+When approved, set `checkpoints.rough_cut_approved=true`, `stage=rough_cut_approved`.
 
-(Subtitles are v0.2 — `burn-subtitles-cn` will hook in here when ready.)
+If `settings.want_subtitles=false`: → `stage=done`. Otherwise continue to Stage E.
+
+### Stage E — subtitles  (stage `rough_cut_approved` → `subtitles_burned` → `done`)
+
+Triggered when `settings.want_subtitles=true` OR the user explicitly asks for subtitles.
+
+1. Split timing into pages:
+   ```bash
+   vlog-cut-subs-split \
+     --timing  <project_dir>/timing.json \
+     --out     <project_dir>/subs_pages.json \
+     --max-chars 12
+   ```
+2. **Read `subs_pages.json` and spot-check the splits.** If a page wraps awkwardly (mid-word breaks, especially for align-narration outputs that have no punctuation), edit the JSON by hand or call `subs-split` with `--keep-together <bigrams.txt>`. See `burn-subtitles-cn/SKILL.md` for the known limitation around whisper-derived text.
+3. Build the .ass:
+   ```bash
+   vlog-cut-subs-build \
+     --pages <project_dir>/subs_pages.json \
+     --out   <project_dir>/subtitles.ass
+   ```
+   For vertical 9:16: add `--size 1080x1920 --font-size 64 --margin-v 200`.
+4. Burn onto the rough cut:
+   ```bash
+   vlog-cut-subs-burn \
+     --video <project_dir>/rough_cut.mp4 \
+     --subs  <project_dir>/subtitles.ass \
+     --out   <project_dir>/rough_cut_subs.mp4
+   ```
+5. Update state: `stage=subtitles_burned`, `outputs.final=<project_dir>/rough_cut_subs.mp4`.
+
+### 🔴 Checkpoint 5 — subtitles preview approved
+
+**STOP.** Ask the user to watch `rough_cut_subs.mp4`. Common adjustments:
+- font/size/position not right → re-run `subs-build` with style flags + re-burn (no need to re-split)
+- wrong text on a page → edit `subs_pages.json` then re-build/burn
+- whole subtitle layer should go away → fall back to the no-subs version
+
+When approved, set `checkpoints.subs_preview_approved=true`, `stage=done`.
 
 ## Resuming
 

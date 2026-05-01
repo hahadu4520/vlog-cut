@@ -1,0 +1,30 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "SubsPages",
+  "description": "Output of burn-subtitles-cn.split. Per-line text broken into ≤N-char pages with per-page start/end timestamps.",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": ["id", "text", "pages"],
+    "properties": {
+      "id":   { "type": "string", "description": "matches the source line id from timing.json" },
+      "text": { "type": "string", "description": "the full original line text (pre-split)" },
+      "pages": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": ["page", "of", "text", "start", "end", "dur"],
+          "properties": {
+            "page":  { "type": "integer", "minimum": 1 },
+            "of":    { "type": "integer", "minimum": 1 },
+            "text":  { "type": "string", "description": "what shows on screen for this page" },
+            "chars": { "type": "integer" },
+            "start": { "type": "number" },
+            "end":   { "type": "number" },
+            "dur":   { "type": "number" }
+          }
+        }
+      }
+    }
+  }
+}
