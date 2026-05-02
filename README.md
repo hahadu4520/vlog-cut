@@ -10,7 +10,7 @@
 
 ## 演示
 
-![demo](docs/img/demo.gif)
+> 📺 _Demo gif coming soon — will be linked here from a GitHub release attachment._
 
 50 秒，从 16 段素材 + 一段口播 + 一份文案 → 1080p 带中文字幕的成片。整个过程 Claude 在 5 个检查点停下让你审，不会一气呵成做错。
 
