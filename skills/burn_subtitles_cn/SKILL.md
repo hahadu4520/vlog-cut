@@ -79,7 +79,9 @@ characters" to viewers who focus on the inner content.
 
 1. Run ffmpeg `cropdetect` on the video to find the narrowest content
    rectangle across all frames
-2. Apply a 5% safety margin to that width
+2. Apply an 18% **title-safe** padding (default `--safe-ratio 0.82`, matching
+   the broadcast convention — tight margins look cramped even when text
+   technically doesn't overflow)
 3. Auto-shrink `--font-size` so every subtitle page fits inside that budget
 4. If anything still overflows after fitting, print a `WARN` with the
    offending pages
@@ -95,8 +97,13 @@ vlog-cut-subs-build \
 
 ### Manual overrides
 
-- `--safe-width <px>` — explicit width budget. Overrides cropdetect. Use
-  when `--video` isn't around or cropdetect picks a wrong rectangle.
+- `--safe-width <px>` — explicit width budget. Overrides cropdetect AND
+  bypasses `--safe-ratio` (use this exact pixel count). Use when `--video`
+  isn't around or cropdetect picks a wrong rectangle.
+- `--safe-ratio <0..1>` — fraction of detected content width subtitles may
+  occupy (default 0.82). Lower for more breathing room (e.g. 0.7), higher
+  if content edges are forgiving (e.g. 0.95). Only applies to cropdetect-
+  derived widths — `--safe-width` is taken literally.
 - `--no-auto-fit` — only WARN about overflow, don't auto-shrink. Useful if
   you want to manually decide between lowering font-size vs. lowering
   `--max-chars` in `subs-split`.

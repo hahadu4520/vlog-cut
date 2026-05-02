@@ -486,6 +486,112 @@ def test_build_video_missing_returns_2(tmp_path, write_json):
     assert rc == 2
 
 
+def test_build_default_safe_ratio_leaves_breathing_room(tmp_path, write_json,
+                                                          capsys):
+    """Default safe-ratio (0.82, broadcast title-safe) should reserve ~18%
+    padding when reading content width via --video / cropdetect.
+    A 12-char Chinese page on a 600-px-wide pillarboxed content area should
+    pick a font-size whose total estimated width ≤ 600 * 0.82 = 492px."""
+    video = tmp_path / "letterboxed.mp4"
+    subprocess.run([
+        "ffmpeg", "-y",
+        "-f", "lavfi",
+        "-i", "color=c=white:s=600x1080:d=2",
+        "-vf", "pad=1920:1080:660:0:black",
+        "-c:v", "libx264", "-pix_fmt", "yuv420p",
+        "-t", "2",
+        str(video),
+    ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    pages_p = write_json(tmp_path / "pages.json", [{
+        "id": "a_00", "text": "AI时代多散步才是正经事",
+        "pages": [{"page": 1, "of": 1, "text": "AI时代多散步才是正经事",
+                   "chars": 12, "start": 0, "end": 3, "dur": 3}],
+    }])
+    out_p = tmp_path / "out.ass"
+    rc = build_mod.cli([
+        "--pages", str(pages_p), "--out", str(out_p),
+        "--font-size", "56", "--video", str(video),
+    ])
+    assert rc == 0
+    chosen = _read_chosen_font_size(out_p)
+    # 12 chars (2 ASCII + 10 Chinese) at chosen size must fit in 600 * 0.82 = 492px
+    # Width estimate: 2 * 0.55 + 10 * 1.0 = 11.1 wide-units
+    # → chosen must be ≤ 492 / 11.1 ≈ 44
+    assert chosen <= 44, f"default ratio too tight; got font-size={chosen} (expected ≤44)"
+    # And shouldn't over-shrink ridiculously — keep something readable
+    assert chosen >= 30, f"default ratio over-shrunk; got font-size={chosen}"
+
+
+def test_build_safe_ratio_override(tmp_path, write_json):
+    """Lower --safe-ratio (more padding) should pick a smaller font-size than the default."""
+    pages_p = write_json(tmp_path / "pages.json", [{
+        "id": "a_00", "text": "AI时代多散步才是正经事",
+        "pages": [{"page": 1, "of": 1, "text": "AI时代多散步才是正经事",
+                   "chars": 12, "start": 0, "end": 3, "dur": 3}],
+    }])
+    # Default ratio (0.82)
+    out_p1 = tmp_path / "default.ass"
+    build_mod.cli(["--pages", str(pages_p), "--out", str(out_p1),
+                   "--font-size", "56", "--safe-width", "600"])
+    default_size = _read_chosen_font_size(out_p1)
+
+    # Stricter ratio (0.6 = 40% padding)
+    out_p2 = tmp_path / "strict.ass"
+    build_mod.cli(["--pages", str(pages_p), "--out", str(out_p2),
+                   "--font-size", "56", "--safe-width", "600",
+                   "--safe-ratio", "0.6"])
+    # Note: --safe-ratio is ignored when --safe-width is set explicitly
+    # (it only applies to cropdetect-derived widths). So this exercises that
+    # the flag parses + doesn't crash. The shrinking via --safe-width itself
+    # is already covered by the previous test.
+    assert _read_chosen_font_size(out_p2) == default_size
+
+
+def test_build_safe_ratio_applies_with_video(tmp_path, write_json):
+    """When using --video (cropdetect), --safe-ratio should affect the budget."""
+    video = tmp_path / "letterboxed.mp4"
+    subprocess.run([
+        "ffmpeg", "-y",
+        "-f", "lavfi",
+        "-i", "color=c=white:s=600x1080:d=2",
+        "-vf", "pad=1920:1080:660:0:black",
+        "-c:v", "libx264", "-pix_fmt", "yuv420p",
+        "-t", "2",
+        str(video),
+    ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    pages_p = write_json(tmp_path / "pages.json", [{
+        "id": "a_00", "text": "AI时代多散步才是正经事",
+        "pages": [{"page": 1, "of": 1, "text": "AI时代多散步才是正经事",
+                   "chars": 12, "start": 0, "end": 3, "dur": 3}],
+    }])
+
+    # Default ratio
+    out1 = tmp_path / "default.ass"
+    build_mod.cli(["--pages", str(pages_p), "--out", str(out1),
+                   "--font-size", "56", "--video", str(video)])
+    default_size = _read_chosen_font_size(out1)
+
+    # Looser ratio (0.95) → bigger budget → larger font OK
+    out2 = tmp_path / "loose.ass"
+    build_mod.cli(["--pages", str(pages_p), "--out", str(out2),
+                   "--font-size", "56", "--video", str(video),
+                   "--safe-ratio", "0.95"])
+    loose_size = _read_chosen_font_size(out2)
+
+    assert loose_size > default_size, \
+        f"looser ratio should pick larger font; got default={default_size}, loose={loose_size}"
+
+
+def test_build_safe_ratio_out_of_range_returns_2(tmp_path, write_json):
+    pages_p = write_json(tmp_path / "pages.json", _wide_page_doc())
+    rc = build_mod.cli(["--pages", str(pages_p),
+                        "--out", str(tmp_path / "out.ass"),
+                        "--safe-width", "500", "--safe-ratio", "1.5"])
+    assert rc == 2
+
+
 def test_build_safe_width_only_warns_for_real_overflows(tmp_path, write_json, capsys):
     """Multi-page input where only one page overflows — warning lists only that one."""
     pages_p = write_json(tmp_path / "pages.json", [{

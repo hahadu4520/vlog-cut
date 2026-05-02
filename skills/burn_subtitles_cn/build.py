@@ -33,7 +33,11 @@ BLACK     = "&H00000000"
 SHADOW_C  = "&H80000000"   # 50% alpha black drop shadow
 
 
-SAFETY_MARGIN = 0.95  # leave 5% padding inside the detected content area
+# Default text-safe ratio. 0.82 ≈ 18% total padding (9% per side), matching the
+# broadcast "title-safe area" convention. Tighter than this (e.g. 0.95) makes
+# subtitles visually press against the content edges with no breathing room,
+# even though they technically don't overflow.
+DEFAULT_SAFE_RATIO = 0.82
 
 # Regex to pull the final cropdetect rectangle from ffmpeg stderr
 _CROP_RE = re.compile(r"crop=(\d+):(\d+):(\d+):(\d+)")
@@ -192,12 +196,19 @@ def cli(argv: list[str] | None = None) -> int:
                    help="video the subtitles will be burned onto. When given, "
                         "build probes the video's actual content width via "
                         "cropdetect and automatically shrinks --font-size so "
-                        "no page overflows the inner content area. This is "
-                        "the recommended path — pass it whenever you can.")
+                        "no page overflows the title-safe content area. This "
+                        "is the recommended path — pass it whenever you can.")
     p.add_argument("--safe-width", type=int, default=None,
                    help="manual override for the subtitle width budget (px). "
                         "Only needed when --video isn't available or "
                         "cropdetect picks a wrong rectangle.")
+    p.add_argument("--safe-ratio", type=float, default=DEFAULT_SAFE_RATIO,
+                   help=f"fraction of the detected content width that subtitles "
+                        f"may occupy (default {DEFAULT_SAFE_RATIO} ≈ "
+                        f"{int((1-DEFAULT_SAFE_RATIO)*100)}%% padding, matching "
+                        f"the broadcast title-safe convention). Lower for more "
+                        f"breathing room, higher to let text occupy more of the "
+                        f"content area. Ignored when --safe-width is set.")
     p.add_argument("--no-auto-fit", action="store_true",
                    help="when --video or --safe-width gives a width budget, "
                         "still don't lower font-size automatically — only warn. "
@@ -217,6 +228,11 @@ def cli(argv: list[str] | None = None) -> int:
 
     pages_doc = json.loads(args.pages.read_text(encoding="utf-8"))
 
+    if not 0.1 <= args.safe_ratio <= 1.0:
+        print(f"--safe-ratio must be between 0.1 and 1.0, got {args.safe_ratio}",
+              file=sys.stderr)
+        return 2
+
     # Resolve the width budget: --safe-width wins; else probe --video; else None.
     safe_width: int | None = args.safe_width
     if safe_width is None and args.video is not None:
@@ -226,9 +242,10 @@ def cli(argv: list[str] | None = None) -> int:
             print(f"  WARN: cropdetect failed; falling back to canvas width "
                   f"{w}px (no overflow guard)", file=sys.stderr)
         else:
-            safe_width = int(detected * SAFETY_MARGIN)
+            safe_width = int(detected * args.safe_ratio)
+            pct = int((1 - args.safe_ratio) * 100)
             print(f"  detected content width: {detected}px → "
-                  f"safe-width={safe_width}px (with {int((1-SAFETY_MARGIN)*100)}% margin)",
+                  f"safe-width={safe_width}px (with {pct}% title-safe padding)",
                   file=sys.stderr)
 
     font_size = args.font_size

@@ -181,10 +181,12 @@ The renderer never told the user the audio file was longer than `video_total`. T
 **First-pass fix (rejected):** added `--safe-width <px>` + `--auto-fit` flags. Both manual / opt-in. The user had to compute the inner content width by hand, remember to pass both flags, and the **default behavior didn't change** — so the original bug recurred whenever those flags were forgotten. User feedback was sharp and right: "这种不是一个很好直接判断的事情吗，你去计算下画面宽度，然后用代码约束好字幕长度，不行啊".
 
 **Real fix:** [skills/burn_subtitles_cn/build.py:14](../skills/burn_subtitles_cn/build.py:14)
-- new flag `--video <mp4>` — when given, build auto-probes the video's content rectangle via ffmpeg `cropdetect`, applies a 5% safety margin, and auto-fits font-size to keep every page inside that budget
+- new flag `--video <mp4>` — when given, build auto-probes the video's content rectangle via ffmpeg `cropdetect`, applies a title-safe padding, and auto-fits font-size to keep every page inside that budget
 - auto-fit is now the default — `--no-auto-fit` opts out (warn only)
 - `--safe-width <px>` kept as a manual override for cases where cropdetect picks the wrong rectangle
 - pipeline SKILL.md Stage E now mandates `--video` on every subs-build call
+
+**Second-pass fix (after user feedback):** initial implementation used a 5% safety margin. User pointed out that subtitles were "pressed against the content edges" — technically not overflowing, but visually claustrophobic. Loosened default to 18% (broadcast title-safe convention; subtitles get 82% of the detected content width). Made the ratio configurable via `--safe-ratio` so users can tighten or loosen per-project. Bumped sanbu vlog from font-size 48 → 41 with the new default; visual breathing room significantly improved.
 
 **Regression tests** (6):
 - `test_build_video_auto_detects_letterbox` — synthetic pillarboxed mp4 → font-size drops automatically without any width flags
