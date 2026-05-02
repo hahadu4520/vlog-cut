@@ -33,6 +33,12 @@ brew install ffmpeg
 pip install edge-tts
 git clone <this repo> ~/vlog-cut
 
+# 1.5 推荐字体（中文字幕用，4 选 1 或全装）
+brew install --cask font-lxgw-wenkai          # 霞鹜文楷 - 手写楷体（默认）
+brew install --cask font-lxgw-marker-gothic   # 霞鹜马克手写 - 马克笔风格
+brew install --cask font-smiley-sans          # 得意黑 - 圆润现代
+brew install --cask font-ma-shan-zheng        # 马善政毛笔 - 毛笔书法
+
 # 2. 在 Claude Code 里调用
 > 我有一段文案和一些视频素材，想做成视频
 # Claude 会触发 vlog-cut-pipeline skill，逐步引导你

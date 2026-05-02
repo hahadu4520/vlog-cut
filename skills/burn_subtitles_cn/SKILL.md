@@ -59,7 +59,7 @@ vlog-cut-subs-build \
 
 Optional style flags (sensible defaults match a 1080p vlog):
 - `--size 1920x1080`
-- `--font "Songti SC"` — make sure the font is installed in the system, OR ffmpeg's libass will fall back
+- `--font "LXGW WenKai"` — open-source 楷体 with a hand-written feel, looks more personal than the macOS default 宋体 (Songti SC). Install via `brew install --cask font-lxgw-wenkai` (see README's font section for the full set we recommend).
 - `--font-size 56`
 - `--margin-v 80` — distance from bottom in px
 - `--outline 2` — black outline around the white text
@@ -67,6 +67,19 @@ Optional style flags (sensible defaults match a 1080p vlog):
 - `--fade-ms 80` — per-page fade-in/out (0 = no fade)
 
 For vertical 9:16 video, drop `--size 1080x1920 --font-size 64 --margin-v 200`.
+
+### Recommended fonts
+
+All four ship as Homebrew casks — `brew install --cask <name>` and pass the family name to `--font`:
+
+| Family name (`--font`)  | Cask | Style |
+|---|---|---|
+| `LXGW WenKai`           | `font-lxgw-wenkai`         | hand-written 楷体 — gentle, personal (default) |
+| `LXGW Marker Gothic`    | `font-lxgw-marker-gothic`  | marker-pen handwriting — friendly, casual |
+| `Smiley Sans`           | `font-smiley-sans`         | rounded oblique — modern, media-style |
+| `Ma Shan Zheng`         | `font-ma-shan-zheng`       | brush calligraphy — artistic but heavier to read |
+
+If `--font` names a family libass can't find, it falls back to whatever fontconfig picks — usually a system Sans. Pass the family name (left column) exactly, including the space.
 
 ### --video (recommended): auto-detect letterbox + auto-fit font
 
@@ -162,5 +175,5 @@ After `subs-burn`, **stop and ask the user to watch the mp4** (checkpoint 4 in t
 ## Dependencies
 
 - `ffmpeg` / `ffprobe` on PATH (libass-enabled build, which Homebrew's `ffmpeg` is by default)
-- Chinese font installed if you change `--font` (the macOS default `Songti SC` works out of the box)
+- A Chinese font installed for `--font`. Default is `LXGW WenKai`; install with `brew install --cask font-lxgw-wenkai`. See "Recommended fonts" above for alternatives. Without a matching font, libass falls back to whatever fontconfig picks (usually system Sans) — usable but not pretty.
 - no Python deps beyond stdlib

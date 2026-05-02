@@ -19,7 +19,7 @@ import sys
 from pathlib import Path
 
 
-DEFAULT_FONT      = "Songti SC"
+DEFAULT_FONT      = "LXGW WenKai"
 DEFAULT_FONT_SIZE = 56
 DEFAULT_W, DEFAULT_H = 1920, 1080
 DEFAULT_MARGIN_V  = 80     # px from bottom
