@@ -25,6 +25,31 @@ BLACK     = "&H00000000"
 SHADOW_C  = "&H80000000"   # 50% alpha black drop shadow
 
 
+def _est_text_width_px(text: str, font_size: int) -> float:
+    """Rough heuristic: Chinese / wide chars ≈ 1.0 × font_size, ASCII ≈ 0.55 × font_size.
+    For a quick "will this overflow" check this is good enough — libass does the
+    actual layout, but we don't want to shell out for that just to print a warning."""
+    width = 0.0
+    for ch in text:
+        if ord(ch) < 128:
+            width += font_size * 0.55
+        else:
+            width += font_size * 1.0
+    return width
+
+
+def _max_font_for_width(text: str, max_width_px: int) -> int:
+    """Inverse of _est_text_width_px: largest integer font_size whose estimated
+    width fits in max_width_px. Returns 0 if even font_size=1 doesn't fit."""
+    if not text:
+        return 999
+    # Equivalent fraction of "wide-char units"
+    wide_units = sum(1.0 if ord(c) >= 128 else 0.55 for c in text)
+    if wide_units == 0:
+        return 999
+    return max(1, int(max_width_px / wide_units))
+
+
 def _t(seconds: float) -> str:
     """Format seconds as ASS time h:mm:ss.cs"""
     h = int(seconds // 3600)
@@ -64,6 +89,37 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     return header + "\n".join(events) + "\n"
 
 
+def _check_widths(pages_doc: list[dict], font_size: int,
+                   safe_width_px: int) -> list[tuple[str, int, str, int]]:
+    """Return a list of (line_id, page_num, text, est_width_px) for every page
+    that overflows the safe width."""
+    overflows: list[tuple[str, int, str, int]] = []
+    for line in pages_doc:
+        for p in line["pages"]:
+            text = p.get("text", "")
+            if not text:
+                continue
+            est = _est_text_width_px(text, font_size)
+            if est > safe_width_px:
+                overflows.append((line["id"], p["page"], text, int(est)))
+    return overflows
+
+
+def _auto_fit_font(pages_doc: list[dict], safe_width_px: int,
+                    requested_size: int) -> int:
+    """Pick the largest font_size ≤ requested_size that keeps EVERY page within
+    safe_width_px."""
+    chosen = requested_size
+    for line in pages_doc:
+        for p in line["pages"]:
+            text = p.get("text", "")
+            if not text:
+                continue
+            mx = _max_font_for_width(text, safe_width_px)
+            chosen = min(chosen, mx)
+    return chosen
+
+
 def cli(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="vlog-cut-subs-build",
                                 description=__doc__.splitlines()[0])
@@ -85,6 +141,15 @@ def cli(argv: list[str] | None = None) -> int:
                    help=f"shadow depth (default {DEFAULT_SHADOW})")
     p.add_argument("--fade-ms", type=int, default=DEFAULT_FADE_MS,
                    help=f"per-page fade-in/out in ms (default {DEFAULT_FADE_MS}, 0 = off)")
+    p.add_argument("--safe-width", type=int, default=None,
+                   help="max width (px) the subtitle text should occupy. Use "
+                        "this for letterboxed video — set it to the inner "
+                        "content width (e.g. 608 for 9:16 portrait inside a "
+                        "1920x1080 canvas). When set, build warns about pages "
+                        "that overflow at the chosen font_size.")
+    p.add_argument("--auto-fit", action="store_true",
+                   help="when --safe-width is set, automatically lower "
+                        "--font-size so every page fits. Otherwise just warn.")
     args = p.parse_args(argv)
 
     if not args.pages.exists():
@@ -96,9 +161,33 @@ def cli(argv: list[str] | None = None) -> int:
     w, h = (int(x) for x in args.size.lower().split("x", 1))
 
     pages_doc = json.loads(args.pages.read_text(encoding="utf-8"))
+
+    font_size = args.font_size
+    if args.safe_width is not None:
+        if args.auto_fit:
+            chosen = _auto_fit_font(pages_doc, args.safe_width, args.font_size)
+            if chosen < args.font_size:
+                print(f"  auto-fit: lowering font-size {args.font_size} → "
+                      f"{chosen} to fit safe-width={args.safe_width}px",
+                      file=sys.stderr)
+            font_size = chosen
+        # always run the check (warn even after auto-fit, in case our heuristic
+        # underestimated something)
+        overflows = _check_widths(pages_doc, font_size, args.safe_width)
+        if overflows:
+            print(f"  WARN: {len(overflows)} page(s) exceed safe-width "
+                  f"{args.safe_width}px at font-size {font_size}:",
+                  file=sys.stderr)
+            for lid, pnum, text, est in overflows[:8]:
+                print(f"    {lid} p{pnum}: ~{est}px  {text!r}", file=sys.stderr)
+            if len(overflows) > 8:
+                print(f"    ... and {len(overflows) - 8} more", file=sys.stderr)
+            print(f"  fix: lower --font-size or split smaller (--max-chars in "
+                  f"subs-split), or pass --auto-fit", file=sys.stderr)
+
     ass = build_ass(pages_doc,
                     w=w, h=h,
-                    font=args.font, font_size=args.font_size,
+                    font=args.font, font_size=font_size,
                     margin_v=args.margin_v,
                     outline=args.outline, shadow=args.shadow,
                     fade_ms=args.fade_ms)
@@ -106,7 +195,7 @@ def cli(argv: list[str] | None = None) -> int:
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(ass, encoding="utf-8")
     n_pages = sum(len(l["pages"]) for l in pages_doc)
-    print(f"Wrote {args.out} ({n_pages} subtitle events)")
+    print(f"Wrote {args.out} ({n_pages} subtitle events, font-size={font_size})")
     return 0
 
 

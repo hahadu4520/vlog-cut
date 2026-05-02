@@ -356,6 +356,91 @@ def test_build_missing_pages_returns_2(tmp_path):
     assert rc == 2
 
 
+def test_build_safe_width_warns_on_overflow(tmp_path, write_json, capsys):
+    """When --safe-width is set and a page exceeds it at the chosen font-size,
+    a WARN must land in stderr listing the offending pages."""
+    # 12 Chinese chars at font_size=56 ≈ 672px.
+    # safe_width=500 → should trigger overflow warning.
+    pages_p = write_json(tmp_path / "pages.json", [{
+        "id": "a_00", "text": "AI时代多散步才是正经事",
+        "pages": [{"page": 1, "of": 1, "text": "AI时代多散步才是正经事",
+                   "chars": 12, "start": 0, "end": 3, "dur": 3}],
+    }])
+    out_p = tmp_path / "out.ass"
+    rc = build_mod.cli([
+        "--pages", str(pages_p), "--out", str(out_p),
+        "--font-size", "56",
+        "--safe-width", "500",
+    ])
+    assert rc == 0
+    captured = capsys.readouterr()
+    assert "WARN" in captured.err
+    assert "safe-width" in captured.err
+    assert "AI时代" in captured.err  # the offending text was printed
+
+
+def test_build_safe_width_no_warning_when_pages_fit(tmp_path, write_json, capsys):
+    """No warning when every page fits within safe_width at the chosen size."""
+    pages_p = write_json(tmp_path / "pages.json", [{
+        "id": "a_00", "text": "短",
+        "pages": [{"page": 1, "of": 1, "text": "短",
+                   "chars": 1, "start": 0, "end": 1, "dur": 1}],
+    }])
+    out_p = tmp_path / "out.ass"
+    build_mod.cli(["--pages", str(pages_p), "--out", str(out_p),
+                   "--font-size", "56", "--safe-width", "500"])
+    captured = capsys.readouterr()
+    assert "WARN" not in captured.err
+
+
+def test_build_auto_fit_lowers_font_size(tmp_path, write_json, capsys):
+    """With --auto-fit, font-size drops to the largest value that fits every page."""
+    pages_p = write_json(tmp_path / "pages.json", [{
+        "id": "a_00", "text": "AI时代多散步才是正经事",
+        "pages": [{"page": 1, "of": 1, "text": "AI时代多散步才是正经事",
+                   "chars": 12, "start": 0, "end": 3, "dur": 3}],
+    }])
+    out_p = tmp_path / "out.ass"
+    rc = build_mod.cli([
+        "--pages", str(pages_p), "--out", str(out_p),
+        "--font-size", "56",
+        "--safe-width", "500",
+        "--auto-fit",
+    ])
+    assert rc == 0
+    captured = capsys.readouterr()
+    assert "auto-fit" in captured.err
+    # The chosen size should be < 56
+    content = out_p.read_text(encoding="utf-8")
+    # The Style line includes the font_size as the third comma-separated field
+    style_line = next(l for l in content.splitlines() if l.startswith("Style:"))
+    fields = style_line.split(",")
+    chosen_size = int(fields[2])
+    assert chosen_size < 56
+    assert chosen_size >= 30  # sanity — shouldn't drop ridiculously low for 12 chars in 500px
+
+
+def test_build_safe_width_only_warns_for_real_overflows(tmp_path, write_json, capsys):
+    """Multi-page input where only one page overflows — warning lists only that one."""
+    pages_p = write_json(tmp_path / "pages.json", [{
+        "id": "a_00", "text": "x",
+        "pages": [
+            {"page": 1, "of": 2, "text": "短",
+             "chars": 1, "start": 0, "end": 1, "dur": 1},
+            {"page": 2, "of": 2, "text": "AI时代多散步才是正经事",
+             "chars": 12, "start": 1, "end": 4, "dur": 3},
+        ],
+    }])
+    out_p = tmp_path / "out.ass"
+    build_mod.cli(["--pages", str(pages_p), "--out", str(out_p),
+                   "--font-size", "56", "--safe-width", "500"])
+    captured = capsys.readouterr()
+    assert "WARN" in captured.err
+    # Only one offending page mentioned
+    assert captured.err.count("AI时代") == 1
+    assert "短" not in captured.err
+
+
 def test_build_bad_size_returns_2(tmp_path, write_json):
     pages_p = write_json(tmp_path / "pages.json", _sample_pages_doc())
     rc = build_mod.cli(["--pages", str(pages_p),

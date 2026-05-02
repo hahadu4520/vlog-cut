@@ -14,8 +14,11 @@ the proper fix looks like.
 | 5 | `render.py` concat broke with relative `--out` | dogfooding 散步 vlog | ✅ fixed | `test_render_works_with_relative_paths` |
 | 6 | `render.py` seg cache key didn't include `in/dur` | dogfooding 散步 vlog (audio felt truncated) | ✅ fixed | `test_cache_invalidates_when_dur_changes` |
 | 7 | Render didn't warn when audio length ≠ video_total | dogfooding 散步 vlog (root cause of perceived "audio truncation") | ✅ fixed | `test_render_warns_on_audio_video_mismatch` |
+| 8 | Whisper transcription errors (`AI时代码`) burned straight into subtitles | dogfooding subtitled 散步 vlog | ✅ fixed (`subs-split --script`) | `test_split_with_script_replaces_text` |
+| 9 | Subtitle pages hard-cut mid-word (no punctuation in whisper text) | same | ✅ fixed (same `--script` flag) | `test_split_with_script_uses_punct_for_better_breaks` |
+| 10 | Subtitle text overflows letterboxed video's content area, looks like "missing chars" | same | ✅ fixed (`subs-build --safe-width [--auto-fit]`) | `test_build_safe_width_*` ×4 |
 
-**Score**: 7 bugs found, 6 fixed in code, 1 behavioral guidance (probe-before-asking).
+**Score**: 10 bugs found, 9 fixed in code, 1 behavioral guidance (probe-before-asking).
 
 **Cross-cutting lessons**:
 1. **Synthetic smoke tests lie.** Tests 1 & 2 were caught only because I hand-wrote a freeze-path test and a zero-gap test. Tests 5 & 6 slipped past 41 passing tests because every test used `tmp_path` (absolute) and rendered exactly once (no iteration). The test harness needs to model realistic user friction: relative paths, multiple iterations, optional deps that may or may not be present.
@@ -140,3 +143,53 @@ The renderer never told the user the audio file was longer than `video_total`. T
 **Regression test:** [tests/test_narration_cut_render.py::test_render_warns_on_audio_video_mismatch](../tests/test_narration_cut_render.py) creates a narration WAV that's 1.5s longer than the timeline says, renders, asserts the warning lands in stderr.
 
 **Lesson:** `-shortest` is a silent-truncation hazard. Any muxer that combines two streams with potentially different lengths should explicitly compare them and warn (or refuse) when they disagree past tolerance.
+
+---
+
+## 8 — whisper recognition errors burned into subtitles
+
+**Found while:** dogfooding the subtitled 散步 vlog. The visible subtitle "AI时代码" is whisper's mis-hearing of "AI时代，能让脑子..."  ("代" + "能" → "代码"). With `subs-split` consuming `timing.json.text` directly (which came from `align-narration` → whisper), every recognition error gets baked into the burnt-in subtitles.
+
+**Root cause:** `align-narration` faithfully copies whisper's transcription into `timing.json.text` so the rest of the pipeline has *something* to display. But the user-authored, correct version of the text lives in `script.json.sections[*].lines[]`. The subtitle layer was reading from the wrong source.
+
+**Fix:** [skills/burn_subtitles_cn/split.py:121](../skills/burn_subtitles_cn/split.py:121) — `vlog-cut-subs-split --script <script.json>` substitutes the script's punctuated `lines[]` (joined by `，`) for each timing line whose `section` matches. Timestamps stay; text comes from the user-authored version.
+
+**Regression test:** `test_split_with_script_replaces_text` in [tests/test_burn_subtitles_cn.py](../tests/test_burn_subtitles_cn.py).
+
+**Lesson:** when there are two sources of truth for the same content (whisper output AND user-authored script), default to the user-authored one for anything user-visible. Whisper's text is for *alignment*, not *display*.
+
+---
+
+## 9 — subtitle pages hard-cut mid-word
+
+**Found while:** same session as #8. Pages like "事现在下楼单纯就是想走一" / "走" — the splitter's punctuation-priority algorithm had no commas/periods to anchor on (whisper drops punctuation in Chinese), so it fell back to hard-cuts every 12 chars. "想走一走" got split as "想走一" + "走".
+
+**Root cause:** same as #8 — `subs-split` consumed whisper's no-punct text. The splitter's algorithm is fine; the input was missing the signals it needed.
+
+**Fix:** same as #8. The script-substituted text *has* punctuation (the user wrote it that way), so the existing splitter algorithm now finds soft breaks at every comma and period.
+
+**Regression test:** `test_split_with_script_uses_punct_for_better_breaks` confirms split output differs (and is better) when `--script` is supplied.
+
+---
+
+## 10 — subtitle text overflows letterboxed video's content area
+
+**Found while:** same session, after fixing #8 and #9. The user reported "字幕宽度超出画面" + "有一些漏掉的字". Frame inspection: at font_size=56 with 12 chars per page, the rendered text ≈ 670px wide, but the inner content of pillarboxed portrait clips is only ~608px wide. The subtitle's last chars trail into the black bars on either side, where the viewer's eye doesn't track them — reads as "missing characters".
+
+**Root cause:** `subs-build` rendered to PlayResX = full canvas width (1920) without any awareness of where the actual video content lives. There was no overflow check at all — fully a build-time failure that only manifested visually, after a full burn.
+
+**Fix:** [skills/burn_subtitles_cn/build.py:14](../skills/burn_subtitles_cn/build.py:14)
+- new flag `--safe-width <px>` declares the inner content width
+- without `--auto-fit`: scans every page, prints a `WARN` listing pages whose estimated text width exceeds safe-width at the chosen font-size, then proceeds anyway (so users can iterate)
+- with `--auto-fit`: automatically lowers `--font-size` to the largest integer value that keeps every page inside safe-width
+- width heuristic: Chinese ≈ 1.0 × font-size, ASCII ≈ 0.55 × font-size — leading indicator, not a precise measurement (libass does actual layout). Doc recommends setting safe-width ~10% below true content width if you see overflow the warning didn't catch.
+
+**Regression tests** (4):
+- `test_build_safe_width_warns_on_overflow` — overflow page triggers WARN with text dump
+- `test_build_safe_width_no_warning_when_pages_fit` — no false alarms
+- `test_build_auto_fit_lowers_font_size` — auto-fit picks size < requested
+- `test_build_safe_width_only_warns_for_real_overflows` — multi-page input warns only on the overflowing one
+
+**Lesson:** burn-in subtitles need to know about safe-area constraints, the same way TV title-safe areas have for decades. Any "render text onto pixels" tool should have a way to declare the content rectangle and verify text stays inside it. The right time to catch this is at build (instant feedback) — waiting until you watch the burnt mp4 (slow re-encode) is too late.
+
+**Future:** when v0.3 adds rotation handling / output-aspect inference, `--safe-width` should be auto-derived from the timeline's effective content rectangle rather than asked for explicitly.
