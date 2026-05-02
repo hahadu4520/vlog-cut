@@ -68,30 +68,48 @@ Optional style flags (sensible defaults match a 1080p vlog):
 
 For vertical 9:16 video, drop `--size 1080x1920 --font-size 64 --margin-v 200`.
 
-### --safe-width (overflow guard for letterboxed video)
+### --video (recommended): auto-detect letterbox + auto-fit font
 
-When the underlying video is portrait pillarboxed inside a horizontal canvas
-(or vice versa), the subtitles by default span the full canvas width — and
-their tails spill into the black bars, which reads as "missing characters" to
-viewers who naturally focus on the inner content area.
+When the underlying video has letterbox/pillarbox black bars (e.g. portrait
+clips inside a 1920x1080 horizontal canvas), subtitles by default span the
+full canvas width and their tails spill into the bars — reads as "missing
+characters" to viewers who focus on the inner content.
 
-Use `--safe-width <px>` to declare how wide the subtitle area should be. For
-a 9:16 portrait video pillarboxed inside 1920x1080, the inner content is
-~608px wide, so `--safe-width 608`.
+**Just pass `--video <mp4>`.** Build will:
 
-- without `--auto-fit`: build emits a `WARN` listing every page that exceeds
-  the safe width at the chosen font-size, then proceeds anyway. Use this when
-  iterating — fix by lowering `--font-size` or splitting smaller in `subs-split`.
-- with `--auto-fit`: build automatically lowers `--font-size` to the largest
-  integer value that keeps every page within `--safe-width`. Quick fix for
-  one-off projects; loses some readability if there's a single very long
-  outlier page.
+1. Run ffmpeg `cropdetect` on the video to find the narrowest content
+   rectangle across all frames
+2. Apply a 5% safety margin to that width
+3. Auto-shrink `--font-size` so every subtitle page fits inside that budget
+4. If anything still overflows after fitting, print a `WARN` with the
+   offending pages
 
-Width estimation is a heuristic (Chinese chars ≈ 1.0 × font-size, ASCII ≈
-0.55 × font-size). libass does the actual layout — the warning is a leading
-indicator, not a precise measurement. If you see overflow in the rendered
-mp4 that the warning didn't catch, set `--safe-width` ~10% lower than the
-true content width.
+This is the recommended path. No manual safe-width math.
+
+```bash
+vlog-cut-subs-build \
+  --pages   <out>/subs_pages.json \
+  --video   <out>/rough_cut.mp4 \
+  --out     <out>/subtitles.ass
+```
+
+### Manual overrides
+
+- `--safe-width <px>` — explicit width budget. Overrides cropdetect. Use
+  when `--video` isn't around or cropdetect picks a wrong rectangle.
+- `--no-auto-fit` — only WARN about overflow, don't auto-shrink. Useful if
+  you want to manually decide between lowering font-size vs. lowering
+  `--max-chars` in `subs-split`.
+
+### How the heuristic works
+
+The text-width estimator inside build assumes Chinese chars ≈ 1.0 ×
+font-size, ASCII ≈ 0.55 × font-size. libass does the actual layout — the
+heuristic is a leading indicator, not a precise measurement. The 5%
+auto-margin on top of cropdetect's content width accounts for slight
+underestimation. If you still see overflow in the rendered mp4 that the
+build-time warning didn't catch, pass `--safe-width` ~10% lower than the
+detected content width.
 
 ## Step 3 — burn (composite onto video)
 

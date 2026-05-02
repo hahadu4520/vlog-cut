@@ -178,18 +178,25 @@ The renderer never told the user the audio file was longer than `video_total`. T
 
 **Root cause:** `subs-build` rendered to PlayResX = full canvas width (1920) without any awareness of where the actual video content lives. There was no overflow check at all — fully a build-time failure that only manifested visually, after a full burn.
 
-**Fix:** [skills/burn_subtitles_cn/build.py:14](../skills/burn_subtitles_cn/build.py:14)
-- new flag `--safe-width <px>` declares the inner content width
-- without `--auto-fit`: scans every page, prints a `WARN` listing pages whose estimated text width exceeds safe-width at the chosen font-size, then proceeds anyway (so users can iterate)
-- with `--auto-fit`: automatically lowers `--font-size` to the largest integer value that keeps every page inside safe-width
-- width heuristic: Chinese ≈ 1.0 × font-size, ASCII ≈ 0.55 × font-size — leading indicator, not a precise measurement (libass does actual layout). Doc recommends setting safe-width ~10% below true content width if you see overflow the warning didn't catch.
+**First-pass fix (rejected):** added `--safe-width <px>` + `--auto-fit` flags. Both manual / opt-in. The user had to compute the inner content width by hand, remember to pass both flags, and the **default behavior didn't change** — so the original bug recurred whenever those flags were forgotten. User feedback was sharp and right: "这种不是一个很好直接判断的事情吗，你去计算下画面宽度，然后用代码约束好字幕长度，不行啊".
 
-**Regression tests** (4):
-- `test_build_safe_width_warns_on_overflow` — overflow page triggers WARN with text dump
-- `test_build_safe_width_no_warning_when_pages_fit` — no false alarms
-- `test_build_auto_fit_lowers_font_size` — auto-fit picks size < requested
-- `test_build_safe_width_only_warns_for_real_overflows` — multi-page input warns only on the overflowing one
+**Real fix:** [skills/burn_subtitles_cn/build.py:14](../skills/burn_subtitles_cn/build.py:14)
+- new flag `--video <mp4>` — when given, build auto-probes the video's content rectangle via ffmpeg `cropdetect`, applies a 5% safety margin, and auto-fits font-size to keep every page inside that budget
+- auto-fit is now the default — `--no-auto-fit` opts out (warn only)
+- `--safe-width <px>` kept as a manual override for cases where cropdetect picks the wrong rectangle
+- pipeline SKILL.md Stage E now mandates `--video` on every subs-build call
 
-**Lesson:** burn-in subtitles need to know about safe-area constraints, the same way TV title-safe areas have for decades. Any "render text onto pixels" tool should have a way to declare the content rectangle and verify text stays inside it. The right time to catch this is at build (instant feedback) — waiting until you watch the burnt mp4 (slow re-encode) is too late.
+**Regression tests** (6):
+- `test_build_video_auto_detects_letterbox` — synthetic pillarboxed mp4 → font-size drops automatically without any width flags
+- `test_build_video_no_letterbox_no_change` — full-frame mp4 → font-size stays
+- `test_build_video_missing_returns_2`
+- `test_build_safe_width_auto_fits_by_default` — manual `--safe-width` still triggers auto-fit (no opt-in needed)
+- `test_build_no_auto_fit_only_warns` — explicit opt-out path still works
+- `test_build_safe_width_only_warns_for_real_overflows` — multi-page input under no-auto-fit only flags real overflows
 
-**Future:** when v0.3 adds rotation handling / output-aspect inference, `--safe-width` should be auto-derived from the timeline's effective content rectangle rather than asked for explicitly.
+**Lessons:**
+- "Add a flag to opt into the safe behavior" is not a fix — it's a future bug. Default behavior must be the safe one; the dangerous one is the opt-in.
+- When a tool has the information it needs (the video file is *right there*), make the tool gather what it needs autonomously instead of asking the user to compute and pass it. The user shouldn't need to know what "9:16 inside 16:9" means in pixels.
+- The right unit of correctness is "user types the obvious command and gets the right output," not "user types the right command and gets the right output."
+
+**Future:** when v0.3 adds rotation handling, the cropdetect call may need to account for rotated source frames. Currently fine because `narration-cut.render` already normalises rotation before encoding segs.

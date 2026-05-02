@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -356,27 +357,55 @@ def test_build_missing_pages_returns_2(tmp_path):
     assert rc == 2
 
 
-def test_build_safe_width_warns_on_overflow(tmp_path, write_json, capsys):
-    """When --safe-width is set and a page exceeds it at the chosen font-size,
-    a WARN must land in stderr listing the offending pages."""
-    # 12 Chinese chars at font_size=56 ≈ 672px.
-    # safe_width=500 → should trigger overflow warning.
-    pages_p = write_json(tmp_path / "pages.json", [{
+def _wide_page_doc():
+    return [{
         "id": "a_00", "text": "AI时代多散步才是正经事",
         "pages": [{"page": 1, "of": 1, "text": "AI时代多散步才是正经事",
                    "chars": 12, "start": 0, "end": 3, "dur": 3}],
-    }])
+    }]
+
+
+def _read_chosen_font_size(ass_path: Path) -> int:
+    content = ass_path.read_text(encoding="utf-8")
+    style_line = next(l for l in content.splitlines() if l.startswith("Style:"))
+    return int(style_line.split(",")[2])
+
+
+def test_build_safe_width_auto_fits_by_default(tmp_path, write_json, capsys):
+    """When --safe-width is set, build now AUTO-FITS by default (no opt-in).
+    The chosen font-size should drop, and there should be no overflow warning."""
+    pages_p = write_json(tmp_path / "pages.json", _wide_page_doc())
     out_p = tmp_path / "out.ass"
     rc = build_mod.cli([
         "--pages", str(pages_p), "--out", str(out_p),
-        "--font-size", "56",
-        "--safe-width", "500",
+        "--font-size", "56", "--safe-width", "500",
     ])
     assert rc == 0
     captured = capsys.readouterr()
+    assert "auto-fit" in captured.err
+    chosen = _read_chosen_font_size(out_p)
+    assert chosen < 56
+    # After auto-fit the page should fit, so NO overflow warning
+    assert "exceed safe-width" not in captured.err
+
+
+def test_build_no_auto_fit_only_warns(tmp_path, write_json, capsys):
+    """With --no-auto-fit, font-size stays at the requested value and overflow
+    pages get a WARN."""
+    pages_p = write_json(tmp_path / "pages.json", _wide_page_doc())
+    out_p = tmp_path / "out.ass"
+    rc = build_mod.cli([
+        "--pages", str(pages_p), "--out", str(out_p),
+        "--font-size", "56", "--safe-width", "500",
+        "--no-auto-fit",
+    ])
+    assert rc == 0
+    captured = capsys.readouterr()
+    assert "lowering font-size" not in captured.err  # didn't auto-fit
     assert "WARN" in captured.err
-    assert "safe-width" in captured.err
-    assert "AI时代" in captured.err  # the offending text was printed
+    assert "exceed safe-width" in captured.err
+    assert "AI时代" in captured.err
+    assert _read_chosen_font_size(out_p) == 56
 
 
 def test_build_safe_width_no_warning_when_pages_fit(tmp_path, write_json, capsys):
@@ -391,33 +420,70 @@ def test_build_safe_width_no_warning_when_pages_fit(tmp_path, write_json, capsys
                    "--font-size", "56", "--safe-width", "500"])
     captured = capsys.readouterr()
     assert "WARN" not in captured.err
+    assert "lowering font-size" not in captured.err  # no auto-fit needed
 
 
-def test_build_auto_fit_lowers_font_size(tmp_path, write_json, capsys):
-    """With --auto-fit, font-size drops to the largest value that fits every page."""
+def test_build_video_auto_detects_letterbox(tmp_path, write_json, capsys,
+                                              make_video_factory):
+    """Pass --video to build → cropdetect picks the inner content rectangle,
+    auto-fit lowers font-size accordingly. No manual --safe-width needed."""
+    # Build a synthetic 1920x1080 video where only the middle 600x1080 is
+    # white and the sides are black (simulates portrait pillarbox).
+    video = tmp_path / "letterboxed.mp4"
+    subprocess.run([
+        "ffmpeg", "-y",
+        "-f", "lavfi",
+        "-i", "color=c=white:s=600x1080:d=2",
+        "-vf", "pad=1920:1080:660:0:black",
+        "-c:v", "libx264", "-pix_fmt", "yuv420p",
+        "-t", "2",
+        str(video),
+    ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    pages_p = write_json(tmp_path / "pages.json", _wide_page_doc())
+    out_p = tmp_path / "out.ass"
+    rc = build_mod.cli([
+        "--pages", str(pages_p), "--out", str(out_p),
+        "--font-size", "56", "--video", str(video),
+    ])
+    assert rc == 0
+    captured = capsys.readouterr()
+    assert "detected content width" in captured.err
+    # Detected width should be ~600 (pillarbox content width)
+    # safe-width = 600 * 0.95 = 570 → font-size must drop below 56
+    assert "auto-fit" in captured.err
+    chosen = _read_chosen_font_size(out_p)
+    assert chosen < 56
+
+
+def test_build_video_no_letterbox_no_change(tmp_path, write_json, capsys,
+                                              make_video_factory):
+    """Full-frame video → cropdetect returns full width → font-size stays."""
+    video = tmp_path / "fullframe.mp4"
+    make_video_factory(video, duration=2.0, size="1920x1080")
+
+    # short page that fits even at the full canvas width
     pages_p = write_json(tmp_path / "pages.json", [{
-        "id": "a_00", "text": "AI时代多散步才是正经事",
-        "pages": [{"page": 1, "of": 1, "text": "AI时代多散步才是正经事",
-                   "chars": 12, "start": 0, "end": 3, "dur": 3}],
+        "id": "a_00", "text": "短文",
+        "pages": [{"page": 1, "of": 1, "text": "短文",
+                   "chars": 2, "start": 0, "end": 1, "dur": 1}],
     }])
     out_p = tmp_path / "out.ass"
     rc = build_mod.cli([
         "--pages", str(pages_p), "--out", str(out_p),
-        "--font-size", "56",
-        "--safe-width", "500",
-        "--auto-fit",
+        "--font-size", "56", "--video", str(video),
     ])
     assert rc == 0
-    captured = capsys.readouterr()
-    assert "auto-fit" in captured.err
-    # The chosen size should be < 56
-    content = out_p.read_text(encoding="utf-8")
-    # The Style line includes the font_size as the third comma-separated field
-    style_line = next(l for l in content.splitlines() if l.startswith("Style:"))
-    fields = style_line.split(",")
-    chosen_size = int(fields[2])
-    assert chosen_size < 56
-    assert chosen_size >= 30  # sanity — shouldn't drop ridiculously low for 12 chars in 500px
+    assert _read_chosen_font_size(out_p) == 56
+
+
+def test_build_video_missing_returns_2(tmp_path, write_json):
+    pages_p = write_json(tmp_path / "pages.json", _wide_page_doc())
+    rc = build_mod.cli([
+        "--pages", str(pages_p), "--out", str(tmp_path / "out.ass"),
+        "--video", str(tmp_path / "nope.mp4"),
+    ])
+    assert rc == 2
 
 
 def test_build_safe_width_only_warns_for_real_overflows(tmp_path, write_json, capsys):
@@ -433,7 +499,8 @@ def test_build_safe_width_only_warns_for_real_overflows(tmp_path, write_json, ca
     }])
     out_p = tmp_path / "out.ass"
     build_mod.cli(["--pages", str(pages_p), "--out", str(out_p),
-                   "--font-size", "56", "--safe-width", "500"])
+                   "--font-size", "56", "--safe-width", "500",
+                   "--no-auto-fit"])
     captured = capsys.readouterr()
     assert "WARN" in captured.err
     # Only one offending page mentioned

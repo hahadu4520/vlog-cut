@@ -195,15 +195,18 @@ Triggered when `settings.want_subtitles=true` OR the user explicitly asks for su
    ```
    For TTS-driven projects (timing already has punctuation), omit `--script`.
 2. **Read `subs_pages.json` and spot-check the splits.** If a page still wraps awkwardly (proper nouns split across pages), call `subs-split` with `--keep-together <bigrams.txt>`. See `burn-subtitles-cn/SKILL.md` for full options.
-3. Build the .ass:
+3. Build the .ass — **always pass `--video <rough_cut.mp4>`**. Build will probe the video's actual content rectangle via cropdetect and automatically shrink `--font-size` so every subtitle fits inside the inner content area (no text bleeding into letterbox/pillarbox black bars):
    ```bash
    vlog-cut-subs-build \
      --pages <project_dir>/subs_pages.json \
+     --video <project_dir>/rough_cut.mp4 \
      --out   <project_dir>/subtitles.ass
    ```
    For vertical 9:16: add `--size 1080x1920 --font-size 64 --margin-v 200`.
 
-   **For pillarboxed video** (e.g. portrait clips inside a 1920x1080 horizontal canvas), add `--safe-width <px> --auto-fit` so the font-size shrinks to keep every subtitle inside the content area. Inner content widths to remember: 9:16 portrait inside 16:9 → ~608px; 1:1 inside 16:9 → ~1080px; 4:3 inside 16:9 → ~1440px. Without `--auto-fit`, you'll get a `WARN` listing the overflowing pages — fix by editing pages or lowering `--font-size`.
+   Override paths (rare):
+   - `--safe-width <px>` — manual override if cropdetect picks a wrong rectangle
+   - `--no-auto-fit` — only warn about overflow, don't auto-shrink font-size
 4. Burn onto the rough cut:
    ```bash
    vlog-cut-subs-burn \

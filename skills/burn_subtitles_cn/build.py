@@ -2,11 +2,19 @@
 
 ASS (Advanced SubStation Alpha) is what ffmpeg's libass burns onto video.
 Style is configurable via CLI (font, size, outline, position, fade).
+
+When --video is supplied, build probes the video's actual content rectangle
+via ffmpeg cropdetect and automatically constrains the subtitle font-size so
+no page overflows the inner content area (i.e. text never bleeds into
+letterbox / pillarbox black bars). This is the recommended path — it removes
+the manual --safe-width guesswork that was easy to forget.
 """
 from __future__ import annotations
 
 import argparse
 import json
+import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -23,6 +31,45 @@ DEFAULT_FADE_MS   = 80     # fade-in / fade-out duration
 WHITE     = "&H00FFFFFF"
 BLACK     = "&H00000000"
 SHADOW_C  = "&H80000000"   # 50% alpha black drop shadow
+
+
+SAFETY_MARGIN = 0.95  # leave 5% padding inside the detected content area
+
+# Regex to pull the final cropdetect rectangle from ffmpeg stderr
+_CROP_RE = re.compile(r"crop=(\d+):(\d+):(\d+):(\d+)")
+
+
+def detect_content_width(video: Path, *, sample_seconds: float = 8.0) -> int | None:
+    """Probe the video for its narrowest content rectangle (= the inner area
+    after letterbox/pillarbox bars). Returns the width in pixels, or None if
+    detection failed.
+
+    Sampling: cropdetect accumulates over every frame it sees. We cap the
+    duration to keep this fast — a few seconds is enough for cropdetect to
+    settle on the conservative (narrowest) crop because every shot in the
+    timeline contributes a frame within those few seconds. For very long
+    videos with rare narrow shots, increase sample_seconds.
+    """
+    try:
+        # cropdetect=24:2:0 — luma threshold 24, edge round 2, reset every 0
+        # frames (i.e. accumulate). The output goes to stderr.
+        cmd = [
+            "ffmpeg",
+            "-t", f"{sample_seconds}",
+            "-i", str(video),
+            "-vf", "cropdetect=24:2:0",
+            "-f", "null", "-",
+        ]
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+        # Last cropdetect line wins — that's the accumulated result
+        crops = _CROP_RE.findall(r.stderr)
+        if not crops:
+            return None
+        # take the smallest width seen (most conservative — narrowest content)
+        widths = [int(w) for w, _h, _x, _y in crops]
+        return min(widths)
+    except Exception:
+        return None
 
 
 def _est_text_width_px(text: str, font_size: int) -> float:
@@ -141,19 +188,27 @@ def cli(argv: list[str] | None = None) -> int:
                    help=f"shadow depth (default {DEFAULT_SHADOW})")
     p.add_argument("--fade-ms", type=int, default=DEFAULT_FADE_MS,
                    help=f"per-page fade-in/out in ms (default {DEFAULT_FADE_MS}, 0 = off)")
+    p.add_argument("--video", type=Path, default=None,
+                   help="video the subtitles will be burned onto. When given, "
+                        "build probes the video's actual content width via "
+                        "cropdetect and automatically shrinks --font-size so "
+                        "no page overflows the inner content area. This is "
+                        "the recommended path — pass it whenever you can.")
     p.add_argument("--safe-width", type=int, default=None,
-                   help="max width (px) the subtitle text should occupy. Use "
-                        "this for letterboxed video — set it to the inner "
-                        "content width (e.g. 608 for 9:16 portrait inside a "
-                        "1920x1080 canvas). When set, build warns about pages "
-                        "that overflow at the chosen font_size.")
-    p.add_argument("--auto-fit", action="store_true",
-                   help="when --safe-width is set, automatically lower "
-                        "--font-size so every page fits. Otherwise just warn.")
+                   help="manual override for the subtitle width budget (px). "
+                        "Only needed when --video isn't available or "
+                        "cropdetect picks a wrong rectangle.")
+    p.add_argument("--no-auto-fit", action="store_true",
+                   help="when --video or --safe-width gives a width budget, "
+                        "still don't lower font-size automatically — only warn. "
+                        "(Default behavior auto-fits.)")
     args = p.parse_args(argv)
 
     if not args.pages.exists():
         print(f"pages not found: {args.pages}", file=sys.stderr)
+        return 2
+    if args.video is not None and not args.video.exists():
+        print(f"video not found: {args.video}", file=sys.stderr)
         return 2
     if "x" not in args.size:
         print(f"--size must be WxH, got {args.size!r}", file=sys.stderr)
@@ -162,28 +217,41 @@ def cli(argv: list[str] | None = None) -> int:
 
     pages_doc = json.loads(args.pages.read_text(encoding="utf-8"))
 
+    # Resolve the width budget: --safe-width wins; else probe --video; else None.
+    safe_width: int | None = args.safe_width
+    if safe_width is None and args.video is not None:
+        print(f"  probing video content width via cropdetect...", file=sys.stderr)
+        detected = detect_content_width(args.video)
+        if detected is None:
+            print(f"  WARN: cropdetect failed; falling back to canvas width "
+                  f"{w}px (no overflow guard)", file=sys.stderr)
+        else:
+            safe_width = int(detected * SAFETY_MARGIN)
+            print(f"  detected content width: {detected}px → "
+                  f"safe-width={safe_width}px (with {int((1-SAFETY_MARGIN)*100)}% margin)",
+                  file=sys.stderr)
+
     font_size = args.font_size
-    if args.safe_width is not None:
-        if args.auto_fit:
-            chosen = _auto_fit_font(pages_doc, args.safe_width, args.font_size)
+    if safe_width is not None:
+        if not args.no_auto_fit:
+            chosen = _auto_fit_font(pages_doc, safe_width, args.font_size)
             if chosen < args.font_size:
                 print(f"  auto-fit: lowering font-size {args.font_size} → "
-                      f"{chosen} to fit safe-width={args.safe_width}px",
+                      f"{chosen} to fit safe-width={safe_width}px",
                       file=sys.stderr)
             font_size = chosen
-        # always run the check (warn even after auto-fit, in case our heuristic
-        # underestimated something)
-        overflows = _check_widths(pages_doc, font_size, args.safe_width)
+        # Always run the overflow check — even after auto-fit our heuristic
+        # may have underestimated some glyph widths.
+        overflows = _check_widths(pages_doc, font_size, safe_width)
         if overflows:
             print(f"  WARN: {len(overflows)} page(s) exceed safe-width "
-                  f"{args.safe_width}px at font-size {font_size}:",
-                  file=sys.stderr)
+                  f"{safe_width}px at font-size {font_size}:", file=sys.stderr)
             for lid, pnum, text, est in overflows[:8]:
                 print(f"    {lid} p{pnum}: ~{est}px  {text!r}", file=sys.stderr)
             if len(overflows) > 8:
                 print(f"    ... and {len(overflows) - 8} more", file=sys.stderr)
-            print(f"  fix: lower --font-size or split smaller (--max-chars in "
-                  f"subs-split), or pass --auto-fit", file=sys.stderr)
+            print(f"  fix: lower --font-size, lower --max-chars in subs-split, "
+                  f"or remove --no-auto-fit", file=sys.stderr)
 
     ass = build_ass(pages_doc,
                     w=w, h=h,
