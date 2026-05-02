@@ -38,22 +38,16 @@ Algorithm: greedy scan from the start of each line, find the strongest available
 Optional:
 - `--max-chars 12` — characters per page (default 12, fits comfortably on 1080p with size 56 font)
 - `--keep-together <path>` — file with whitespace-separated 2-char bigrams that must NOT split across pages (e.g. proper nouns). One file per project.
+- `--script <path>` — script.json with sections containing punctuated `lines[]`. For each timing line whose `section` matches, the splitter replaces the timing's text with the script's punctuated version (joined by `，`). Timestamps are unchanged. **Use this when timing.json came from `align-narration`** — whisper's Chinese transcription strips punctuation, so without `--script` the splitter has no soft-break anchors and is forced into hard-cuts every 12 chars (e.g. "AI" + "时代码"). With `--script`, it can break at commas / periods you wrote.
 
 The output matches `shared/schemas/subs_pages.schema.json`.
 
-**Known limitation (v0.2):** when the source `timing.json` came from
-`align-narration` (i.e. user-recorded audio + whisper transcription), the
-`text` field has no punctuation — whisper's Chinese transcription doesn't
-emit commas / periods. Without punctuation anchors, the splitter falls back
-to hard-cut every 12 chars, which can wrap awkwardly mid-word ("AI" + "时代码").
+### text-source rule of thumb
 
-**Workaround:** edit `subs_pages.json` by hand to fix the worst pages, then
-build/burn. A v0.3 enhancement is planned: `--script` flag to substitute the
-script.json's punctuated `lines[]` text before splitting, using whisper
-timestamps but the user-authored line breaks.
+- driven from `tts-from-script` → timing.json already has the script's punctuated text → no `--script` needed
+- driven from `align-narration` → timing.json has whisper's no-punct text → **always pass `--script`** to recover splits at natural break points
 
-If you're driving from `tts-from-script`, the timing.json text DOES carry
-punctuation (it's just the script lines verbatim) and splitting works well.
+If a section in timing.json doesn't match anything in `--script`, the splitter prints a WARN and keeps the original text for that section.
 
 ## Step 2 — build (paged JSON → ASS)
 

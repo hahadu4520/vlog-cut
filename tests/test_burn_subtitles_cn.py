@@ -132,6 +132,139 @@ def test_split_keep_together_file(tmp_path, write_json):
     assert rc == 0
 
 
+def test_split_with_script_replaces_text(tmp_path, write_json):
+    """When --script is supplied, splitter should use the script's punctuated
+    section text instead of the timing's whisper-derived (no-punct) text.
+    Timestamps come from timing; text comes from script."""
+    timing = {
+        "voice": "user-recorded", "rate": "+0%", "total_duration": 10.0,
+        "lines": [{
+            "id": "intro_00", "section": "intro", "section_title": "钩子",
+            "text": "AI越好用我越想出门散步以前下楼是去办事现在下楼单纯就是想走一走",  # no punct
+            "file": "rec.m4a", "duration": 10.0, "start": 0.0, "end": 10.0,
+        }],
+    }
+    script = {
+        "voice": "user-recorded", "rate": "+0%",
+        "sections": [{
+            "id": "intro", "title": "钩子",
+            "lines": [
+                "AI越好用我越想出门散步",
+                "以前下楼是去办事，现在下楼单纯就是想走一走",
+            ],
+        }],
+    }
+    timing_p = write_json(tmp_path / "timing.json", timing)
+    script_p = write_json(tmp_path / "script.json", script)
+    out_p = tmp_path / "subs_pages.json"
+
+    rc = split_mod.cli([
+        "--timing", str(timing_p),
+        "--script", str(script_p),
+        "--out", str(out_p),
+        "--max-chars", "12",
+    ])
+    assert rc == 0
+
+    data = json.loads(out_p.read_text(encoding="utf-8"))
+    line = data[0]
+    # The original text is preserved as `text`, but pages should be split on
+    # the punctuated version.
+    full_pages_text = "".join(p["text"] for p in line["pages"])
+    # With punctuation breaks, splits must happen at commas, not mid-word.
+    # Check that no page ends mid-"想走一走" or splits "AI"
+    for p in line["pages"]:
+        assert "想走一" not in p["text"] or "想走一走" in p["text"], \
+            f"page split mid-word: {p['text']!r}"
+
+
+def test_split_with_script_falls_back_when_section_missing(tmp_path, write_json,
+                                                            capsys):
+    """If a timing line's section isn't in the script, keep the original text
+    and emit a warning."""
+    timing = {
+        "voice": "v", "rate": "+0%", "total_duration": 4.0,
+        "lines": [{
+            "id": "a_00", "section": "a", "section_title": "A",
+            "text": "原始无标点文本一二三四", "file": "x.mp3",
+            "duration": 4.0, "start": 0.0, "end": 4.0,
+        }],
+    }
+    script = {  # no section "a"
+        "voice": "v", "rate": "+0%",
+        "sections": [{"id": "b", "lines": ["完全不相关"]}],
+    }
+    timing_p = write_json(tmp_path / "timing.json", timing)
+    script_p = write_json(tmp_path / "script.json", script)
+    out_p = tmp_path / "subs_pages.json"
+    rc = split_mod.cli([
+        "--timing", str(timing_p),
+        "--script", str(script_p),
+        "--out", str(out_p),
+    ])
+    assert rc == 0
+    captured = capsys.readouterr()
+    assert "WARN" in captured.err
+    assert "section 'a'" in captured.err or 'section "a"' in captured.err
+
+    # Original text was preserved (otherwise unrelated text would have leaked in)
+    data = json.loads(out_p.read_text(encoding="utf-8"))
+    full = "".join(p["text"] for p in data[0]["pages"])
+    assert "完全不相关" not in full
+
+
+def test_split_with_script_uses_punct_for_better_breaks(tmp_path, write_json):
+    """Concrete check: the punctuated script lets the punctuation-priority
+    splitter find soft breaks where the no-punct version had to hard-cut."""
+    no_punct_text = "短语一短语二短语三短语四短语五短语六"  # 18 chars, no break
+    timing = {
+        "voice": "v", "rate": "+0%", "total_duration": 6.0,
+        "lines": [{"id": "a_00", "section": "a", "section_title": "A",
+                   "text": no_punct_text, "file": "x.mp3",
+                   "duration": 6.0, "start": 0.0, "end": 6.0}],
+    }
+    script = {
+        "voice": "v", "rate": "+0%",
+        "sections": [{
+            "id": "a",
+            "lines": ["短语一", "短语二", "短语三", "短语四", "短语五", "短语六"],
+        }],
+    }
+    timing_p = write_json(tmp_path / "timing.json", timing)
+    script_p = write_json(tmp_path / "script.json", script)
+    out_p = tmp_path / "subs_pages.json"
+
+    # without --script: hard-cut
+    split_mod.cli(["--timing", str(timing_p), "--out", str(out_p),
+                   "--max-chars", "8"])
+    no_script = json.loads(out_p.read_text(encoding="utf-8"))
+    no_script_pages = [p["text"] for p in no_script[0]["pages"]]
+
+    # with --script: lines are joined with "，" so splitter has soft breaks
+    split_mod.cli(["--timing", str(timing_p), "--script", str(script_p),
+                   "--out", str(out_p), "--max-chars", "8"])
+    with_script = json.loads(out_p.read_text(encoding="utf-8"))
+    with_script_pages = [p["text"] for p in with_script[0]["pages"]]
+
+    # Without script, the second page starts mid-"短语" because the first hard
+    # cut at 8 chars lands inside a 短语N unit.
+    # With script, breaks happen at commas → every page should end at a 短语.
+    assert no_script_pages != with_script_pages, \
+        "with-script splits should differ from no-script when punctuation exists"
+
+
+def test_split_missing_script_returns_2(tmp_path, write_json):
+    timing = {"voice": "v", "rate": "+0%", "total_duration": 1.0,
+              "lines": [{"id": "a_00", "section": "a", "section_title": "A",
+                         "text": "x", "file": "x.mp3",
+                         "duration": 1.0, "start": 0.0, "end": 1.0}]}
+    timing_p = write_json(tmp_path / "timing.json", timing)
+    rc = split_mod.cli(["--timing", str(timing_p),
+                        "--script", str(tmp_path / "nope.json"),
+                        "--out", str(tmp_path / "out.json")])
+    assert rc == 2
+
+
 def test_split_missing_timing_returns_2(tmp_path):
     rc = split_mod.cli(["--timing", str(tmp_path / "nope.json"),
                         "--out", str(tmp_path / "out.json")])

@@ -185,14 +185,16 @@ If `settings.want_subtitles=false`: → `stage=done`. Otherwise continue to Stag
 
 Triggered when `settings.want_subtitles=true` OR the user explicitly asks for subtitles.
 
-1. Split timing into pages:
+1. Split timing into pages. **If narration came from `align-narration`, pass `--script` so the splitter uses your punctuated text instead of whisper's no-punct version:**
    ```bash
    vlog-cut-subs-split \
      --timing  <project_dir>/timing.json \
+     --script  <project_dir>/script.json \
      --out     <project_dir>/subs_pages.json \
      --max-chars 12
    ```
-2. **Read `subs_pages.json` and spot-check the splits.** If a page wraps awkwardly (mid-word breaks, especially for align-narration outputs that have no punctuation), edit the JSON by hand or call `subs-split` with `--keep-together <bigrams.txt>`. See `burn-subtitles-cn/SKILL.md` for the known limitation around whisper-derived text.
+   For TTS-driven projects (timing already has punctuation), omit `--script`.
+2. **Read `subs_pages.json` and spot-check the splits.** If a page still wraps awkwardly (proper nouns split across pages), call `subs-split` with `--keep-together <bigrams.txt>`. See `burn-subtitles-cn/SKILL.md` for full options.
 3. Build the .ass:
    ```bash
    vlog-cut-subs-build \

@@ -126,6 +126,40 @@ def _read_keep_together(path: Path | None) -> set[str]:
     return set(path.read_text(encoding="utf-8").split())
 
 
+def _build_section_text_map(script: dict) -> dict[str, str]:
+    """For a script.json, build a map section_id → joined punctuated text.
+
+    Joins each section's `lines[]` with `，` so the splitter has multiple
+    soft-break candidates inside a long section.
+    """
+    out: dict[str, str] = {}
+    for sec in script.get("sections", []):
+        sid = sec.get("id")
+        if not sid:
+            continue
+        lines = sec.get("lines") or []
+        if lines:
+            out[sid] = "，".join(s.strip() for s in lines if s.strip())
+    return out
+
+
+def _substitute_text(line: dict, script_text_by_section: dict[str, str],
+                     warnings: list[str]) -> dict:
+    """Return a shallow copy of `line` with `text` replaced by the script's
+    punctuated version when the section matches. Falls back to the original
+    text (and records a warning) when there's no match."""
+    sec = line.get("section")
+    if sec and sec in script_text_by_section:
+        new_text = script_text_by_section[sec]
+        if new_text and new_text != line["text"]:
+            return {**line, "text": new_text}
+    if sec and sec not in script_text_by_section:
+        warnings.append(
+            f"line {line['id']!r}: section {sec!r} not in script — keeping original text"
+        )
+    return line
+
+
 def cli(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="vlog-cut-subs-split",
                                 description=__doc__.splitlines()[0])
@@ -137,19 +171,37 @@ def cli(argv: list[str] | None = None) -> int:
     p.add_argument("--keep-together", type=Path, default=None,
                    help="optional file with whitespace-separated 2-char "
                         "bigrams that must NOT split across pages")
+    p.add_argument("--script", type=Path, default=None,
+                   help="optional script.json — for each timing line, replace "
+                        "its text with the punctuated `lines[]` from the "
+                        "matching section. Use this when timing.json came from "
+                        "align-narration / whisper (no punctuation in text).")
     args = p.parse_args(argv)
 
     if not args.timing.exists():
         print(f"timing not found: {args.timing}", file=sys.stderr)
         return 2
+    if args.script is not None and not args.script.exists():
+        print(f"script not found: {args.script}", file=sys.stderr)
+        return 2
 
     timing = json.loads(args.timing.read_text(encoding="utf-8"))
     keep_together = _read_keep_together(args.keep_together)
 
+    section_text: dict[str, str] = {}
+    if args.script is not None:
+        script = json.loads(args.script.read_text(encoding="utf-8"))
+        section_text = _build_section_text_map(script)
+
+    sub_warnings: list[str] = []
     out_records: list[dict] = []
     for line in timing["lines"]:
+        if section_text:
+            line = _substitute_text(line, section_text, sub_warnings)
         out_records.append(_build_pages_for_line(line, args.max_chars,
                                                   keep_together))
+    for w in sub_warnings:
+        print(f"  WARN {w}", file=sys.stderr)
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(out_records, ensure_ascii=False, indent=2),
