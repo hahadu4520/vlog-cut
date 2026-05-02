@@ -3,7 +3,7 @@
 > Narration-driven video editing pipeline for Claude Code.
 > 给 Claude Code 用的"按文案剪辑"流水线 —— 长文案 + 素材池 → 自动剪出成片。
 
-[![tests](https://github.com/duu/vlog-cut/actions/workflows/test.yml/badge.svg)](https://github.com/duu/vlog-cut/actions/workflows/test.yml)
+[![tests](https://github.com/hahadu4520/vlog-cut/actions/workflows/test.yml/badge.svg)](https://github.com/hahadu4520/vlog-cut/actions/workflows/test.yml)
 ![macOS-tested](https://img.shields.io/badge/tested%20on-macOS-blue)
 ![python](https://img.shields.io/badge/python-3.10%2B-3776ab)
 ![license](https://img.shields.io/badge/license-MIT-green)
