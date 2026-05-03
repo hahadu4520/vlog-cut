@@ -1,52 +1,49 @@
 # vlog-cut
 
-> 给 Claude Code 用的「按文案剪辑」流水线 —— 长文案 + 素材池 → 自动剪出成片。
+> 一段口播 + 一个素材文件夹 → 带中文字幕的成片，全程在你审下推进。
 
 [![tests](https://github.com/hahadu4520/vlog-cut/actions/workflows/test.yml/badge.svg)](https://github.com/hahadu4520/vlog-cut/actions/workflows/test.yml)
 ![macOS](https://img.shields.io/badge/tested%20on-macOS-blue)
 ![python](https://img.shields.io/badge/python-3.10%2B-3776ab)
 ![license](https://img.shields.io/badge/license-PolyForm%20Noncommercial-purple)
 
-一组 Claude Code skill：你给文案 + 一个素材文件夹，Claude 在 5 个检查点引导你出粗剪 + 中文字幕。每个关键节点 Claude 都会**主动停下等你确认**，不会一气呵成做错。
+![demo](docs/img/hero.jpg)
+
+vlog-cut 是一组 Claude Code skill。你给 Claude 文案和素材，它在 5 个关键节点停下让你审 —— 配音对不对、镜头选得好不好、字幕断句顺不顺 —— 不会一气呵成做错。
+
+## 能做什么
+
+- 🎙️ **配音** —— TTS 合成（edge-tts）或对齐你自己的录音（whisper）
+- 🏷️ **素材打标** —— Claude 看每段视频的关键帧，自动写场景标签
+- 🎬 **按文案剪辑** —— 算法配镜头 + Claude 微调，**你确认后才渲染**
+- 🔤 **中文字幕** —— 标点感知断句、4 款手写字体可选、自动避开黑边
+- 🛡️ **5 个审核检查点** —— 每一步都能改，不会全跑完才发现错
 
 ## 适合谁
 
-- vlogger / 旅拍 / 解说类创作者，文案先行的工作流
-- 接受「先粗剪，再去 Final Cut 精修」的人
+- vlogger、旅拍、解说类创作者，文案先行
+- 接受「先粗剪、再去 Final Cut 精修」的工作流
 - 本地优先，不想上传素材到云
-- 当前**仅 macOS 测过**，Windows 几乎跑不了
+- 目前在 macOS 上工作得最好
 
-## 上手
+## 上手 30 秒
 
 ```bash
 brew install ffmpeg
 brew install --cask font-lxgw-wenkai          # 字幕默认字体
 git clone https://github.com/hahadu4520/vlog-cut.git
 cd vlog-cut && pip install -e .
-bash install.sh                                # 检查依赖
 ```
 
-然后在 Claude Code 里说人话：
+打开 Claude Code，说：
 
 > 我有一段文案和一堆视频素材，帮我做成视频
 
-Claude 会触发 `vlog-cut-pipeline` skill 引导你。
-
-📖 [完整教程](docs/tutorials/quick-start.md) · 🪲 [已知问题](docs/known-issues.md) · 🤝 [贡献](CONTRIBUTING.md)
-
-## 路线图
-
-- [x] **v0.1** pipeline + tts + index + narration-cut
-- [x] **v0.2** burn-subtitles-cn（自动避开黑边）
-- [x] **v0.4** align-narration（用户自带配音 → whisper 对齐）
-- [ ] **v0.3** rotation 自动正方向 / 9:16 竖屏输出
-- [ ] **v0.5** BGM 配乐
-- [ ] **v1.0** Linux/Windows 实测 + PyPI
+剩下的交给 Claude，它会按 5 个检查点引导你。**完整教程：[5 分钟跑通一支 vlog](docs/tutorials/quick-start.md)**。
 
 ## License
 
-**Source-available under [PolyForm Noncommercial 1.0.0](LICENSE).**
+**[PolyForm Noncommercial 1.0.0](LICENSE)**
 
-- ✅ 个人 / 学习 / 研究 / 业余项目：免费
-- ❌ 商业用途、企业内部使用：需另购商业 license
-- 📩 商业授权请联系：**微信 `duhh4520`**
+- ✅ 个人 / 学习 / 业余项目：免费
+- 💼 商业或企业内部使用：请购买商业 license，**微信 `duhh4520`**

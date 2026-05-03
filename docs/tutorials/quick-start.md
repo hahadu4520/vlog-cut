@@ -1,66 +1,61 @@
-# Quick Start：5-10 分钟做一支带字幕的 vlog
+# 5 分钟跑通一支 vlog
 
-这篇用我们 dogfood 时做的「**AI 时代多散步才是正经事**」散步 vlog 当例子，带你走一遍完整流程。
+跟 Claude Code 协作，从一段口播 + 一堆素材到带字幕的成片。
 
-## 你需要准备
+## 准备
 
-- macOS（其它系统未测）
-- 1 段你录的口播音频（`.m4a` / `.mp3` / `.wav` 都行），或者一份待 TTS 的文案
-- 一个文件夹，里面装 5-20 段相关的视频素材（`.mp4` / `.mov` 都行）
-- Claude Code 已经装好，能进入项目目录
+- macOS
+- 一段你录的口播音频（`.m4a` / `.mp3` / `.wav`），或者一份待 TTS 的文案
+- 一个文件夹，5-20 段相关视频素材（`.mp4` / `.mov`）
+- Claude Code
 
-## 装一次依赖
+## 装一次
 
 ```bash
 brew install ffmpeg
-pip install openai-whisper           # 仅当用自己录的口播
-git clone <this-repo> ~/vlog-cut
-cd ~/vlog-cut
-pip install -e .
-
-# 字体（默认 LXGW WenKai；其它可选见 README）
-brew install --cask font-lxgw-wenkai
+brew install --cask font-lxgw-wenkai          # 字幕字体
+pip install openai-whisper                    # 仅用自己录的口播时需要
+git clone https://github.com/hahadu4520/vlog-cut.git
+cd vlog-cut && pip install -e .
 ```
 
-或者：`bash install.sh` 会一并检查 + 提示缺啥。
+跑 `bash install.sh` 检查所有依赖是否齐全。
 
-## 跟 Claude 说人话
+## 开始
 
-进 Claude Code 进入项目目录（或者任何目录都行，反正 vlog-cut CLI 全局可用），说：
+打开 Claude Code，告诉它你的素材在哪、文案是什么：
 
-> 我有一段口播 `~/我的口播.m4a` 和素材文件夹 `~/Downloads/clips/`，文案是「AI 时代多散步才是正经事」，帮我做成视频。
+> 我有一段口播 `~/Desktop/我的口播.m4a`，素材在 `~/Desktop/clips/`，文案是「AI 时代多散步才是正经事」，帮我做成视频。
 
-Claude 会触发 `vlog-cut-pipeline` skill，按 5 个检查点引导你。
+Claude 会触发 `vlog-cut-pipeline` skill，开始走完整流程。
 
-## 5 个检查点是什么
+## 5 个检查点
 
-完整流程分 5 段，每段做完 Claude 会停下来等你确认：
-
-| 段 | Claude 自动做 | 你审核什么 |
+| 阶段 | Claude 做什么 | 你审什么 |
 |---|---|---|
-| **A. 配音** | 跑 TTS 或对齐你的录音 → 出 `narration.wav` + `timing.json` | 听一下，语速 / 错字对不对 |
-| **B. 素材索引** | ffmpeg 抽帧 → 给每段视频做 contact sheet → Claude 看图打标签 | 标签准不准、哪些素材该标 unusable |
-| **C. timeline** | 算法给每句文案配镜头 → Claude 读 sheets 手工调整 | 看 timeline.json，哪个镜头不对换一下 |
-| **D. 粗剪** | ffmpeg 切片 → concat → mux 配音 → 出 `rough_cut.mp4` | 看视频，画面是否对得上音 |
-| **E. 字幕（可选）** | 按句子分页 → 生成 .ass → 烧到视频上 | 看字幕断句、字号、位置 |
+| **配音** | TTS 合成 / whisper 对齐你的录音 | 听一下，语速 / 错字对不对 |
+| **素材打标** | 抽帧 → 看图给每段写场景标签 | 标签准不准，哪些素材不可用 |
+| **镜头分配** | 给每句文案配镜头 → 生成 timeline | 哪个镜头不合适、要不要换 |
+| **粗剪渲染** | ffmpeg 切片 + 拼接 + 配音 | 画面对得上音吗 |
+| **字幕** | 按标点断句 → 烧上去 | 字幕断句、字号、位置 |
 
-每个 STOP 都是明确的：Claude 会说「现在请你审核 X，OK 后说"继续"」。
+每个检查点 Claude 会停下来问你「OK 吗」，你说继续才往下走。任何阶段不满意都能改，改完再看。
 
-## 实例：散步 vlog 实跑
+## 例子：「散步」vlog 怎么做出来的
 
-我们走一遍真实的 dogfood 流程作为例子。
+让我把真实流程拆开，看每步发生了什么。
 
-### 准备物料
+### 物料
 
 ```
-~/Downloads/0501testvideo/
-├── 口播.m4a                  # 你录的（55 秒）
-├── IMG_1578.mov              # 16 段素材（机场玻璃顶 / 雨车窗 / 火锅 / 山顶咖啡 ...）
+~/Desktop/sanbu/
+├── 口播.m4a                  # 55 秒，你录的
+├── IMG_1578.mov              # 16 段素材：机场玻璃顶 / 雨车窗 / 火锅 / 山顶咖啡 ...
 ├── IMG_1608.MOV
-├── ...
+└── ...
 ```
 
-文案（贴给 Claude）：
+文案：
 
 ```
 AI 时代多散步才是正经事。
@@ -69,120 +64,46 @@ AI 时代多散步才是正经事。
 ...
 ```
 
-### 跟 Claude 说
+### 阶段 1：配音
 
-> 我录了口播 `~/Downloads/0501testvideo/口播.m4a`，素材在同一个文件夹，文案我贴给你。帮我做成视频。
+你给的是录音，Claude 会用 whisper 对齐文案 → 出 `timing.json`（每段对应录音的哪个时间点）+ `narration.wav`。
 
-### 阶段 A：配音
+🛑 你听一下原录音，确认每段边界对得上节奏。
 
-Claude 探测到你给了 `.m4a`（不是文案），所以触发 `align-narration`：
+### 阶段 2：素材打标
 
-```bash
-vlog-cut-align --audio ~/Downloads/0501testvideo/口播.m4a \
-               --script ~/Downloads/0501testvideo/script.json \
-               --out ~/Downloads/0501testvideo/proj
-```
+Claude 给每段视频抽 3 帧拼成一张图，自己读图给视频写标签：场景描述、主题标签、是否可用、对应文案哪段。
 
-输出：`timing.json`（每段对应录音的哪段时间）+ `narration.wav`（标准化的音频）。
+🛑 你扫一眼标签：方向坏了的素材标对了吗、火锅放在「场景」段还是「正经事」段。
 
-🛑 **检查点 1**：你听一下原口播，确认 timing.json 里 5 段的边界对得上你的录音节奏。错了可以让 Claude 调 script.json 里每段的 `head_text` 重跑。
+### 阶段 3：镜头分配
 
-### 阶段 B：素材索引
+算法按标签给每句文案配镜头，输出 `timeline.json`。Claude 自己再读一遍，把分配奇怪的镜头换掉。
 
-```bash
-vlog-cut-index --src ~/Downloads/0501testvideo --out ~/Downloads/0501testvideo/proj
-```
+🛑 你审 timeline：同一段素材有没有重复用、节奏匀不匀。改 timeline 不用重跑前面。
 
-每段视频抽 3 帧，拼成一张 contact sheet（`proj/sheets/IMG_xxxx.jpg`）。Claude 用 Read 工具看每张 sheet，给 `assets_index.json` 加 scene / tags / chapters / usable 字段。
+### 阶段 4：粗剪
 
-🛑 **检查点 2**：你看一下 `assets_index.json`，确认：
-- 哪些素材标了 `usable: false`，对不对（比如方向坏了的）
-- `chapters` 字段对不对（intro / scene / reason / outro）
-- 有没有重要素材被漏标
+ffmpeg 一段段切，拼起来，配上你的录音 → `rough_cut.mp4`。50 秒视频在 M1 mac 大概 30-60 秒。
 
-### 阶段 C：timeline
+🛑 看视频。哪段镜头不对换一下，回到阶段 3 改 timeline 重新渲染（已切的段会缓存，只重切改动的部分）。
 
-```bash
-vlog-cut-plan --timing proj/timing.json --assets proj/assets_index.json \
-              --out proj/timeline.json --size 1920x1080 --fps 30
-```
+### 阶段 5：字幕
 
-算法给每段口播配镜头。然后 Claude 自己读一遍 timeline，看哪些镜头分配奇怪，**手工改 timeline.json**（这一步是 Claude 主动做，不是 plan 命令做）。
+按文案标点断句 → 生成 `.ass` 字幕 → 烧到视频上 → `rough_cut_subs.mp4`。
 
-```bash
-vlog-cut-validate --timeline proj/timeline.json --src ~/Downloads/0501testvideo \
-                  --timing proj/timing.json
-# 必须 exit 0（clean），exit 1 是有 warning 但能继续，exit 2 必须修
-```
+字幕模块会**自动检测画面黑边**（比如竖屏素材在横屏画布里），自动收紧字号让字幕停在内容区里、不溢出。
 
-🛑 **检查点 3**：审 timeline.json。
-- 同一段素材重复出现没？（散步 vlog 时我让 IMG_4857 出现了 5 次，太单调）
-- 食物镜头集中在 reason 段、风景集中在 outro 段，对不对？
-
-让 Claude 调，每改一次重新 validate。
-
-### 阶段 D：粗剪渲染
-
-```bash
-vlog-cut-render --timeline proj/timeline.json --timing proj/timing.json \
-                --src ~/Downloads/0501testvideo \
-                --narration proj/narration.wav \
-                --out proj --name rough_cut.mp4
-```
-
-ffmpeg 一段一段切，concat 起来，mux 上配音。50 秒视频在 M1 mac 上大约 30 秒-1 分钟。
-
-🛑 **检查点 4**：`open proj/rough_cut.mp4` 看一遍。
-- 画面跟音同不同步？
-- 镜头切换有没有突兀的？
-- 音频末尾有没有被截？（我们修过这个 bug，render 现在会主动 warn）
-
-### 阶段 E：字幕
-
-```bash
-vlog-cut-subs-split --timing proj/timing.json --script proj/script.json \
-                    --out proj/subs_pages.json --max-chars 12
-
-vlog-cut-subs-build --pages proj/subs_pages.json \
-                    --video proj/rough_cut.mp4 \
-                    --out proj/subtitles.ass
-
-vlog-cut-subs-burn --video proj/rough_cut.mp4 --subs proj/subtitles.ass \
-                   --out proj/rough_cut_subs.mp4
-```
-
-注意：
-- `--script` 让字幕用你写的有标点版本（而不是 whisper 转的无标点版本）
-- `--video` 让 subs-build 自动检测黑边，自动收紧字号
-
-🛑 **检查点 5**：看 `rough_cut_subs.mp4`，字幕字号 / 位置 / 断句对不对。
+🛑 字幕断句、字号、位置，不满意都能改。
 
 ## 常见问题
 
-### Q：我没有口播，能用 TTS 吗？
-能。把第一阶段从 `vlog-cut-align` 换成 `vlog-cut-tts`：
-```bash
-vlog-cut-tts --script proj/script.json --out proj
-```
-script.json 写每段的文字，会用 edge-tts 合成。**默认 voice 是 zh-CN-XiaoyiNeural**。
+**没有口播，能用 TTS 吗？** 能，配音阶段会改用 edge-tts 合成。默认中文女声 `zh-CN-XiaoyiNeural`，可以换。
 
-### Q：renderer 能不能输出 9:16 竖屏？
-当前不行（v0.3 路线图）。现在所有素材会被 pad 到 16:9，竖屏素材两边有黑边。字幕已经会自动避开黑边。
+**能输出 9:16 竖屏吗？** 当前不行，所有素材会 pad 到 16:9，竖屏素材左右有黑边。字幕已经会自动避开。
 
-### Q：whisper 要不要 GPU？
-不要。CPU 跑 50 秒音频用 large-v3-turbo 模型大约 1-2 分钟。模型首次自动下载约 1.5GB。
+**whisper 要 GPU 吗？** 不要。CPU 跑 50 秒音频用 large-v3-turbo 模型大约 1-2 分钟。模型首次自动下载约 1.5GB。
 
-### Q：可以不让 Claude 介入，纯命令行跑吗？
-可以。每个 CLI 都能独立跑。但你得自己写 timeline.json 这种"创意活"。Claude 的价值在于「读 sheets 决定哪个镜头配哪句话」+「在每个检查点等你审」。
+**能不让 Claude 介入纯命令行跑吗？** 可以。每个 CLI 都能独立跑，但你得自己写 timeline.json 这种创意活。Claude 的价值在「读图选镜头」和「在每个检查点等你审」。
 
-### Q：bug 怎么报？
-[docs/known-issues.md](../known-issues.md) 看看是不是已知。如果不是，开 GitHub issue，附上：
-- 哪一步出错（A/B/C/D/E）
-- 完整命令行 + 报错
-- `proj/state.json` 内容（如果存在）
-
-## 参考
-
-- [docs/known-issues.md](../known-issues.md) — dogfood 找出的 10 个 bug 复盘
-- 项目根 [README.md](../../README.md) — 全貌
-- 各 skill 的 SKILL.md — 单独 CLI 的全部参数
+**bug 怎么报？** 看 [docs/known-issues.md](../known-issues.md)，是不是已知问题。如果不是，开 GitHub issue。

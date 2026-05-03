@@ -15,7 +15,7 @@ proj/
 # raw source clips for the user's own projects
 0501testvideo/
 
-# Demo media — too big for the main repo, host as GitHub release attachment
-# and link from README.
+# Heavy demo media stays out of git; small product screenshots are fine.
 docs/img/*.gif
 docs/img/*.mp4
+docs/img/*.png
