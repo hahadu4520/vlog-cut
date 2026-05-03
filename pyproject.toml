@@ -3,7 +3,7 @@ name = "vlog-cut"
 version = "0.1.0"
 description = "Narration-driven video editing pipeline for Claude Code"
 readme = "README.md"
-license = { text = "MIT" }
+license = { text = "PolyForm-Noncommercial-1.0.0" }
 requires-python = ">=3.10"
 dependencies = [
     "edge-tts>=6.1",

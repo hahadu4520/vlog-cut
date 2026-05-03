@@ -113,4 +113,19 @@ Before opening a PR:
 
 ## License
 
-By contributing you agree your contributions are licensed under MIT.
+By submitting a contribution (PR, patch, suggestion that ends up in code) you
+agree:
+
+1. Your contribution is licensed to the project under the **PolyForm
+   Noncommercial 1.0.0** license (see [LICENSE](LICENSE)) — i.e. free for
+   personal / non-commercial use, commercial use requires a separate license.
+2. You grant the project maintainer the right to **re-license your
+   contribution** under different terms in the future (e.g. for selling
+   commercial licenses to companies). This lets the project sustainably
+   offer paid commercial licenses without needing to track down every past
+   contributor for permission.
+3. You have the right to make the contribution (it's your work, or you
+   have permission to contribute it).
+
+If any of the above is a problem, please discuss in an issue before opening
+the PR.
