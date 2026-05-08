@@ -7,11 +7,9 @@
 ![python](https://img.shields.io/badge/python-3.10%2B-3776ab)
 ![license](https://img.shields.io/badge/license-PolyForm%20Noncommercial-purple)
 
-<p align="center">
-  <video src="https://github.com/hahadu4520/vlog-cut/releases/download/demo/yunnan-demo.mp4" controls playsinline width="800" poster="docs/img/hero.jpg"></video>
-</p>
+https://github.com/user-attachments/assets/80b98d9b-40f7-4740-a26a-c278525d0ebd
 
-> 上面是用 vlog-cut 做的一支 200 秒云南寻甸 vlog（如果浏览器不渲染播放器，[点这里下载视频](https://github.com/hahadu4520/vlog-cut/releases/download/demo/yunnan-demo.mp4)）。
+> 上面是用 vlog-cut 做的一支 200 秒云南寻甸 vlog（[原画质下载](https://github.com/hahadu4520/vlog-cut/releases/download/demo/yunnan-demo.mp4)）。
 
 vlog-cut 是一组 Claude Code skill。你给 Claude 文案和素材，它在 5 个关键节点停下让你审 —— 配音对不对、镜头选得好不好、字幕断句顺不顺 —— 不会一气呵成做错。
 
